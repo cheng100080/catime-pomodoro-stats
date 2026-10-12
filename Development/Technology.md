@@ -52,6 +52,14 @@
 - 插件文本支持标签：`<fps:N>` `<catime>` `<exit>N` `<color:>` `<font:路径>` `<md>` `![](图片)`
   —— **没有字号标签**，字号只能通过缩放的粒度控制。
 
+**官方交互（调整位置/大小，源码 + 官方 README 双重确认）**
+- 主窗口：**双击**进入编辑模式（`HandleLButtonDblClk → StartEditMode`，`window_message_handlers.c:491`；
+  也可用 `HOTKEY_EDIT_MODE`），编辑模式下 **拖动=移动、滚轮=缩放、右键=退出**（官方 README 原文）。
+  保存行为：正常模式写 `WINDOW_SCALE`，插件模式写 `PLUGIN_SCALE`，位置两模式共用 `CLOCK_WINDOW_POS_X/Y`
+  （`window_core.c` 保存这 4 项）。
+- 通知窗口：直接拖动移动（`notification.c` 的 `WM_NCHITTEST→HTCAPTION` + `WM_LBUTTONDOWN`）；
+  或在「通知设置」的预览窗口上操作：**滚轮=透明度、Ctrl+滚轮=字号百分比、拖动=位置/大小**。
+
 **通知窗口（`config.ini [Notification]`）**
 - 尺寸：`NOTIFICATION_WINDOW_WIDTH` 350~1600、`_HEIGHT` 48~900（`ClampNotificationWidth/Height`）；
   未配置时宽度按文本自动算、高度固定 80。

@@ -1,0 +1,6 @@
+[19:37:03.987] Catime PID = 27500
+[19:37:03.991] 基线窗口数=7: CatimeWindowClass; IME; MSCTFIME UI; SoPY_Hint; SoPY_Status; SoPY_UI; Sogou_TSF_UI
+[19:37:03.992] 启动 CLI 倒计时 0:10
+[19:37:04.061] CLI rc=0
+[19:37:39.088] 监控结束
+[19:40:17.482] 已还原 config.ini

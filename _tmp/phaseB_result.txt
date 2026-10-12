@@ -1,0 +1,16 @@
+[19:33:07] 配置已备份 -> D:\files\works\20051012CatTime插件\_tmp\config.ini.bak
+[19:33:07] 已将 NOTIFICATION_TYPE 临时改为 CATIME
+[19:33:07] 测试副本就绪: _tmp/testB/pomodoro_stats.ps1
+[19:33:27] 等待插件启动（6s）...
+[19:33:33] Catime 主窗口 hwnd=264682 pid=27500
+[19:33:33] PASS: B0 Catime 正在运行 
+[19:33:33] PASS: B1 插件启动显示 T0 W0 A0 got='<fps:1>T0 W0 A0'
+[19:33:33] 启动 8 秒倒计时（CLI: catime 0:08）...
+[19:33:34] CLI 返回码=0
+[19:34:04] FAIL: B2 真实 Catime toast 窗口被检测到 
+[19:34:06] FAIL: B3 倒计时完成被计为 1 个番茄 state={'version': 1, 'total': 0, 'phase': 0, 'lastEvent': None, 'days': {}}
+[19:34:06] FAIL: B3b 显示 T1 W1 A1 got='<fps:1>T0 W0 A0'
+[19:34:06] 恢复 config.ini...
+[19:34:09] PASS: B4 恢复OS类型后显示 SET CATIME got='<fps:1>SET CATIME'
+[19:34:09] PASS: B4b 配置已还原（NOTIFICATION_TYPE=OS） 
+[19:34:09] === Phase B 完成 ===

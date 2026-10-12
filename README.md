@@ -10,23 +10,39 @@ T3 W12 A57        T = 今日(Today)   W = 本周(Week，周一起算)   A = 累�
 
 ## 安装
 
-1. 把 `pomodoro_stats.ps1` 复制到 Catime 插件目录：
+1. 把这两个文件一起复制到 Catime 插件目录：
 
    ```
    %LOCALAPPDATA%\Catime\resources\plugins\
    ```
 
-   （也可以在 Catime 托盘图标右键 → `Plugins` → `Open Plugin Folder` 打开该目录）
+   | 文件 | 作用 |
+   |---|---|
+   | **`pomodoro_stats.bat`** | **启动入口 —— 在 Catime 菜单里点这个** |
+   | `pomodoro_stats_core.ps1` | 真正的统计逻辑（不要点它） |
 
-2. 托盘图标右键 → `Plugins` → 点击 `pomodoro_stats` → 首次运行选择 **Trust and Run**。
+   （也可以托盘右键 → `插件` → `打开插件文件夹` 打开该目录）
+
+2. 托盘图标右键 → `插件` → 点击 **`pomodoro_stats.bat`** → 首次运行选 **「信任并运行」**。
 
 3. 窗口即显示统计数字。脚本顶部的 `$LabelToday / $LabelWeek / $LabelTotal` 可改显示标签。
 
 > **前置条件：Catime 的通知类型必须是 `CATIME`（默认值）。**
-> 在 Catime 设置里把通知类型改为 "Catime"，或直接编辑
-> `%LOCALAPPDATA%\Catime\config.ini` 中的 `NOTIFICATION_TYPE=CATIME`。
-> 若为 `OS`（系统通知）或 `SYSTEM_MODAL`，插件无法可靠感知阶段完成事件，
+> 在 Catime 设置里：托盘右键 → `通知设置` → `通知方式` → 选 **「Catime通知窗口」**；
+> 或直接编辑 `%LOCALAPPDATA%\Catime\config.ini` 中的 `NOTIFICATION_TYPE=CATIME`。
+> 若为 `OS`（操作系统通知）或 `SYSTEM_MODAL`，插件无法可靠感知阶段完成事件，
 > 会显示 `SET CATIME` 提示而不计数。原因见下文「为什么必须用 CATIME 通知类型」。
+
+### 为什么要多一个 `.bat` 入口？
+
+Catime 启动 `.ps1` 插件时执行的是 `powershell.exe -NoProfile ... -File 脚本`，**靠 PATH
+环境变量找 `powershell.exe`**。而 `powershell.exe` 位于
+`%SystemRoot%\System32\WindowsPowerShell\v1.0\`，不在 `System32` 根目录——如果系统 PATH
+里缺少这一项（有些机器/精简系统会缺），Catime 就会报 **`powershell.exe not found`**，
+插件根本不会运行。
+
+`cmd.exe` 位于 `System32`，一定找得到，所以用一个 `.bat` 入口、在里面对 PowerShell
+使用**绝对路径**调用，即可绕开该问题、且不依赖任何系统设置改动。
 
 ## 依赖
 
@@ -80,11 +96,23 @@ T3 W12 A57        T = 今日(Today)   W = 本周(Week，周一起算)   A = 累�
 ## 手动验证（约 1 分钟）
 
 1. 确认通知类型为 `CATIME`（见上文前置条件）。
-2. 托盘图标右键 → `Plugins` → 点击 `pomodoro_stats` → **Trust and Run**，
+2. 托盘图标**右键** → **`插件`** → 点击 **`pomodoro_stats.bat`** → 弹窗里选 **「信任并运行」**
+   （菜单里还会有一个 `pomodoro_stats_core.ps1`，那是逻辑文件，**不要点它**）。
    窗口应显示 `T0 W0 A0`（或已有数据）。
-3. 托盘图标右键 → 选番茄钟（为快速验证，可先在设置里把番茄钟阶段改成
-   几十秒的短时长），跑完第一个工作阶段。
+3. 快速触发一次"阶段完成"：**左键**单击托盘图标 → 在「倒计时」输入框输入 **`10s`** 回车
+   （倒计时结束弹出的通知与番茄钟阶段完成时完全相同，会被计为 1 个工作阶段）。
+   也可以走真实番茄钟，但默认阶段是 45 分钟，太久。
 4. 窗口数字应从 `T0 W0 A0` 变为 `T1 W1 A1`（休息阶段完成时数字不变）。
+
+## 故障排查
+
+| 现象 | 原因 / 处理 |
+|---|---|
+| 窗口显示 `powershell.exe not found` | 误点了 `pomodoro_stats_core.ps1`。点 `pomodoro_stats.bat` 那个入口 |
+| 窗口显示 `SET CATIME` | 通知类型不是 `CATIME`（见上文前置条件）；改完保存即生效 |
+| 通知弹出了但数字不动 | 插件没在运行：托盘右键 → `插件`，确认 `pomodoro_stats.bat` 前有 ✓ |
+| 菜单里列出两个 `pomodoro_stats*` | 正常，`.bat` 是入口，`..._core.ps1` 是逻辑文件 |
+| 想清零统计 | 删除插件目录下的 `pomodoro_stats.json` |
 
 ## License
 

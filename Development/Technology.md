@@ -93,5 +93,8 @@
 - **启动插件**：用 PowerShell 工具的 `run_in_background` 跑**有界副本**
   （`while ($true)` → `for ($ti=0; $ti -lt 240; $ti++)`，约 120s 自动退出）。
 - **分层结果**：Phase A（模拟：分类/自纠正/周统计/门禁）19/19、
-  Phase C（.bat 入口链路）4/4、Phase D（catime 标签 + 日志 + 计数）6/6 均通过；
-  Phase B（真实 Catime 端到端）因无法稳定自动触发倒计时而未闭环 → 需用户手动验证。
+  Phase C（.bat 入口链路）4/4、Phase D（`<catime>` 标签 + 日志 + 计数）6/6、
+  Phase E（cycle 口径，序列 8s/4s）6/6、Phase F（序列 8,4,8,4,8 = 3 个工作段，
+  work 口径边跑边计）9/9 均通过；
+  Phase B（真实 Catime 端到端）因无法稳定自动触发倒计时而未闭环 → 已由用户实机确认成功
+  （2026-10-12 20:34-20:44：插件存活并计数 3 次，界面显示 `T3 W3 A3`）。

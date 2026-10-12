@@ -53,19 +53,22 @@ $ShowTotal = $false
 #   也可用：'bottomleft' / 'topright' / 'topleft' / 'center'
 # 说明：Catime 的位置设置两种模式共用，而插件窗口尺寸与正常时间不同，
 #       所以缩小后不会自动贴回右下角——用这个开关让插件自己贴角即可。
-$PluginAnchor  = 'bottomright'
+$PluginAnchor  = 'keep'
 $AnchorMarginX = 0
 $AnchorMarginY = 0
 
-# 显示模式：
-#   'both'  = 始终显示"统计 + 计时"（稳健：番茄钟每一段、普通倒计时都能看到计时）
+# 显示布局：
+#   'stacked' = 两行：第一行小字统计，第二行大字计时（用 markdown 标题字号分级实现：
+#               ###### = 基准×0.9， # = 基准×1.5）
+#   'single'  = 单行：统计 + 计时排在同一行
+$DisplayLayout = 'stacked'
+
+# 计时期间的显示：
+#   'both'  = 始终显示"统计 + 计时"（推荐：番茄钟每一段都能同时看到计时）
 #   'timer' = 推断正在计时时只显示计时，其余时间显示统计
-#             ⚠ 注意：Catime 不提供"计时开始"的任何信号（开始计时不写配置文件、
-#             不新建窗口、无 IPC），所以：
-#               · 每轮番茄钟的第 1 段无法切换（插件感知不到它开始了），仍显示"统计 + 计时"
-#               · 你手动中断计时后，统计要等该段预期结束才会恢复
-#             想要纯计时观感就改成 'timer'
-$TimerDisplayMode = 'timer'
+#             ⚠ Catime 不提供"计时开始"信号（开始计时不写配置文件、不新建窗口、无 IPC），
+#             所以每轮第 1 段无法切换，且手动中断后统计要等该段预期结束才恢复
+$TimerDisplayMode = 'both'
 
 # 计数口径（计什么算"1 个番茄"）：
 #   'work'  = 每完成一个"工作阶段"计 1 个（正统番茄工作法：番茄 = 一个工作时段，休息不算）
@@ -353,12 +356,15 @@ $CatimeTag = '  <catime></catime>'
 
 function Refresh-Display {
     param($State)
-    # $TimerDisplayMode='timer' 且推断正在计时 → 只显示计时
-    if ($TimerDisplayMode -eq 'timer' -and $script:TimerEndsAt -ne $null -and
-        (Get-Date) -lt $script:TimerEndsAt) {
-        Write-Display '<catime></catime>'
+    $timerOnly = ($TimerDisplayMode -eq 'timer') -and ($script:TimerEndsAt -ne $null) -and
+                 ((Get-Date) -lt $script:TimerEndsAt)
+
+    if ($timerOnly) {
+        if ($DisplayLayout -eq 'stacked') { Write-Display '<md># <catime></catime></md>' }
+        else { Write-Display '<catime></catime>' }
         return
     }
+
     $today  = Get-Date
     $dayKey = $today.ToString('yyyy-MM-dd')
     $t = 0
@@ -371,7 +377,15 @@ function Refresh-Display {
     if ($ShowWeek)  { $parts += ('{0}{1}' -f $LabelWeek, $w) }
     if ($ShowMonth) { $parts += ('{0}{1}' -f $LabelMonth, $mo) }
     if ($ShowTotal) { $parts += ('{0}{1}' -f $LabelTotal, $State.total) }
-    Write-Display (($parts -join ' ') + $CatimeTag)
+    $line = $parts -join ' '
+
+    if ($DisplayLayout -eq 'stacked') {
+        # 第一行：小字统计（六级标题 = 基准×0.9）；第二行：大字计时（一级标题 = 基准×1.5）
+        Write-Display ("<md>###### {0}`n# <catime></catime></md>" -f $line)
+    }
+    else {
+        Write-Display ($line + $CatimeTag)
+    }
 }
 
 # ---------------- 阶段完成处理 ----------------

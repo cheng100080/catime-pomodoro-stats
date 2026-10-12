@@ -1,1 +1,0 @@
-Write-Output "TXT-RAN-OK"

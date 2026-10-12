@@ -9,3 +9,6 @@ upstream/
 output.txt
 # 运行期数据
 pomodoro_stats.json
+
+# 临时测试脚本与结果（保留在本地，不入库）
+_tmp/

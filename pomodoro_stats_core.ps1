@@ -42,6 +42,21 @@ $LabelWeek  = 'W'
 $LabelMonth = 'M'
 $LabelTotal = 'A'
 
+# 显示哪些统计（设 $false 只是"不显示"，后台照常记录，可随时改回）
+$ShowWeek  = $true
+$ShowMonth = $false
+$ShowTotal = $false
+
+# 插件模式的窗口位置（可选；只影响插件运行时，不会改动你正常时间的位置设置）
+#   'keep'        = 不动窗口（与正常时间共用 Catime 的位置）
+#   'bottomright' = 贴工作区右下角（自动避开任务栏）
+#   也可用：'bottomleft' / 'topright' / 'topleft' / 'center'
+# 说明：Catime 的位置设置两种模式共用，而插件窗口尺寸与正常时间不同，
+#       所以缩小后不会自动贴回右下角——用这个开关让插件自己贴角即可。
+$PluginAnchor  = 'bottomright'
+$AnchorMarginX = 0
+$AnchorMarginY = 0
+
 # 显示模式：
 #   'both'  = 始终显示"统计 + 计时"（稳健：番茄钟每一段、普通倒计时都能看到计时）
 #   'timer' = 推断正在计时时只显示计时，其余时间显示统计
@@ -50,7 +65,7 @@ $LabelTotal = 'A'
 #               · 每轮番茄钟的第 1 段无法切换（插件感知不到它开始了），仍显示"统计 + 计时"
 #               · 你手动中断计时后，统计要等该段预期结束才会恢复
 #             想要纯计时观感就改成 'timer'
-$TimerDisplayMode = 'both'
+$TimerDisplayMode = 'timer'
 
 # 计数口径（计什么算"1 个番茄"）：
 #   'work'  = 每完成一个"工作阶段"计 1 个（正统番茄工作法：番茄 = 一个工作时段，休息不算）
@@ -107,6 +122,14 @@ public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
 public static extern bool EnumWindows(EnumProc lpEnumFunc, IntPtr lParam);
 [System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
 public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool SystemParametersInfo(uint action, uint param, out RECT rect, uint winIni);
 // 返回类名为 cls 的第一个顶层窗口句柄，找不到返回 IntPtr.Zero
 public static IntPtr FindWindowByClass(string cls) {
     IntPtr found = IntPtr.Zero;
@@ -118,6 +141,31 @@ public static IntPtr FindWindowByClass(string cls) {
         return true;
     }, IntPtr.Zero);
     return found;
+}
+// 窗口尺寸编码成一个 long（宽<<32 | 高），便于比较是否变化
+public static long GetWindowSignature(IntPtr hWnd) {
+    RECT r;
+    if (!GetWindowRect(hWnd, out r)) { return 0; }
+    return ((long)(r.Right - r.Left) << 32) | (uint)(r.Bottom - r.Top);
+}
+// 把窗口贴到指定位置：mode 1=右下 2=左下 3=右上 4=左上 5=居中 6=绝对坐标
+public static bool AnchorWindow(IntPtr hWnd, int mode, int marginX, int marginY) {
+    RECT r, wa;
+    if (!GetWindowRect(hWnd, out r)) { return false; }
+    int w = r.Right - r.Left, h = r.Bottom - r.Top;
+    if (!SystemParametersInfo(0x0030, 0, out wa, 0)) { return false; }
+    int x, y;
+    switch (mode) {
+        case 1: x = wa.Right  - w - marginX; y = wa.Bottom - h - marginY; break;
+        case 2: x = wa.Left   + marginX;     y = wa.Bottom - h - marginY; break;
+        case 3: x = wa.Right  - w - marginX; y = wa.Top    + marginY;     break;
+        case 4: x = wa.Left   + marginX;     y = wa.Top    + marginY;     break;
+        case 5: x = wa.Left + (wa.Right - wa.Left - w) / 2;
+                y = wa.Top  + (wa.Bottom - wa.Top - h) / 2;               break;
+        case 6: x = marginX; y = marginY;                                 break;
+        default: return false;
+    }
+    return SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, 0x0001 | 0x0004 | 0x0010);
 }
 '@
 
@@ -314,8 +362,13 @@ function Refresh-Display {
     if ($State.days.ContainsKey($dayKey)) { $t = $State.days[$dayKey] }
     $w = Get-WeekCount  $State.days $today
     $mo = Get-MonthCount $State.days $today
-    Write-Display ('{0}{1} {2}{3} {4}{5} {6}{7}{8}' -f `
-        $LabelToday, $t, $LabelWeek, $w, $LabelMonth, $mo, $LabelTotal, $State.total, $CatimeTag)
+
+    # 按开关拼装显示内容（未显示的项后台照常统计）
+    $parts = @(('{0}{1}' -f $LabelToday, $t))
+    if ($ShowWeek)  { $parts += ('{0}{1}' -f $LabelWeek, $w) }
+    if ($ShowMonth) { $parts += ('{0}{1}' -f $LabelMonth, $mo) }
+    if ($ShowTotal) { $parts += ('{0}{1}' -f $LabelTotal, $State.total) }
+    Write-Display (($parts -join ' ') + $CatimeTag)
 }
 
 # ---------------- 阶段完成处理 ----------------
@@ -399,6 +452,17 @@ $loggedErr  = @{}
 $script:TimerEndsAt = $null   # 推断的"当前这段计时结束时刻"（$TimerDisplayMode='timer' 用）
 $script:CyclesDone  = 0       # 本次运行中已跑完的循环数
 $timerOnlyShown     = $false  # 当前是否处于"只显示计时"状态
+$lastWinSig         = 0       # 上次看到的 Catime 窗口尺寸（用于窗口贴角）
+
+# 插件模式窗口定位模式
+$AnchorMode = switch ($PluginAnchor) {
+    'bottomright' { 1 }
+    'bottomleft'  { 2 }
+    'topright'    { 3 }
+    'topleft'     { 4 }
+    'center'      { 5 }
+    default       { 0 }
+}
 
 Write-Log ("启动: PS={0} 配置={1} 类型={2} 阶段序列={3}" -f `
     $PSVersionTable.PSVersion, $ConfigFile, $cfg.Type, ($cfg.Pattern -join ','))
@@ -413,6 +477,16 @@ if ($cfg.Type -ne 'CATIME') {
 }
 else {
     Refresh-Display $state
+}
+
+# 启动时若启用了窗口贴角，立即贴一次
+if ($AnchorMode -gt 0) {
+    $hw0 = [PomStat.Win]::FindWindowByClass('CatimeWindowClass')
+    if ($hw0 -ne [IntPtr]::Zero) {
+        $lastWinSig = [PomStat.Win]::GetWindowSignature($hw0)
+        [PomStat.Win]::AnchorWindow($hw0, $AnchorMode, $AnchorMarginX, $AnchorMarginY) | Out-Null
+        Write-Log ("插件模式窗口已贴角: {0} (margin {1},{2})" -f $PluginAnchor, $AnchorMarginX, $AnchorMarginY)
+    }
 }
 
 while ($true) {
@@ -460,6 +534,18 @@ while ($true) {
                 if ($running -ne $timerOnlyShown) {
                     $timerOnlyShown = $running
                     Refresh-Display $state
+                }
+            }
+
+            # 插件模式窗口贴角（$PluginAnchor 非 'keep' 时生效；窗口尺寸变化后重新贴角）
+            if ($AnchorMode -gt 0) {
+                $hw = [PomStat.Win]::FindWindowByClass('CatimeWindowClass')
+                if ($hw -ne [IntPtr]::Zero) {
+                    $sig = [PomStat.Win]::GetWindowSignature($hw)
+                    if ($sig -ne 0 -and $sig -ne $lastWinSig) {
+                        $lastWinSig = $sig
+                        [PomStat.Win]::AnchorWindow($hw, $AnchorMode, $AnchorMarginX, $AnchorMarginY) | Out-Null
+                    }
                 }
             }
         }

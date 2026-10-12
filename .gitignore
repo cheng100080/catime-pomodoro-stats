@@ -1,0 +1,9 @@
+# WorkBuddy 项目数据
+.workbuddy/
+
+# 上游参考仓库（独立 git repo，仅作调研参考，不跟踪）
+upstream/
+
+# 本地运行产物
+*.log
+output.txt

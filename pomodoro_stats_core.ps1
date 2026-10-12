@@ -39,7 +39,18 @@ $ErrorActionPreference = 'Stop'
 # 中文标签可能显示为方框，故默认使用 ASCII 标签。可自行改成中文试试。
 $LabelToday = 'T'
 $LabelWeek  = 'W'
+$LabelMonth = 'M'
 $LabelTotal = 'A'
+
+# 显示模式：
+#   'both'  = 始终显示"统计 + 计时"（稳健：番茄钟每一段、普通倒计时都能看到计时）
+#   'timer' = 推断正在计时时只显示计时，其余时间显示统计
+#             ⚠ 注意：Catime 不提供"计时开始"的任何信号（开始计时不写配置文件、
+#             不新建窗口、无 IPC），所以：
+#               · 每轮番茄钟的第 1 段无法切换（插件感知不到它开始了），仍显示"统计 + 计时"
+#               · 你手动中断计时后，统计要等该段预期结束才会恢复
+#             想要纯计时观感就改成 'timer'
+$TimerDisplayMode = 'both'
 
 # 计数口径（计什么算"1 个番茄"）：
 #   'work'  = 每完成一个"工作阶段"计 1 个（正统番茄工作法：番茄 = 一个工作时段，休息不算）
@@ -118,7 +129,7 @@ function Read-CatimeConfig {
         @{ Type = 'CATIME'|'OS'|'SYSTEM_MODAL'; Pattern = @(工作秒,休息秒,...) }
       读取失败时返回默认值（与 Catime 内置默认一致）。
     #>
-    $result = @{ Type = 'CATIME'; Pattern = @(1500, 300, 1500, 600) }
+    $result = @{ Type = 'CATIME'; Pattern = @(1500, 300, 1500, 600); LoopCount = 1 }
     if (-not $ConfigFile) { return $result }
     try {
         $section = ''
@@ -135,6 +146,9 @@ function Read-CatimeConfig {
             $val = $t.Substring($eq + 1).Trim()
             if ($section -eq 'Notification' -and $key -eq 'NOTIFICATION_TYPE' -and $val) {
                 $result.Type = $val.ToUpper()
+            }
+            elseif ($section -eq 'Pomodoro' -and $key -eq 'POMODORO_LOOP_COUNT') {
+                if ($val -match '^\d+$' -and [int]$val -ge 1) { $result.LoopCount = [int]$val }
             }
             elseif ($section -eq 'Pomodoro' -and $key -eq 'POMODORO_TIME_OPTIONS') {
                 $parts = @()
@@ -247,6 +261,16 @@ function Get-WeekCount {
     return $n
 }
 
+function Get-MonthCount {
+    param($Days, [datetime]$Today)
+    $prefix = $Today.ToString('yyyy-MM')
+    $n = 0
+    foreach ($k in $Days.Keys) {
+        if ($k.StartsWith($prefix)) { $n += $Days[$k] }
+    }
+    return $n
+}
+
 function Write-Display {
     param([string]$Text)
     try {
@@ -278,19 +302,26 @@ $CatimeTag = '  <catime></catime>'
 
 function Refresh-Display {
     param($State)
+    # $TimerDisplayMode='timer' 且推断正在计时 → 只显示计时
+    if ($TimerDisplayMode -eq 'timer' -and $script:TimerEndsAt -ne $null -and
+        (Get-Date) -lt $script:TimerEndsAt) {
+        Write-Display '<catime></catime>'
+        return
+    }
     $today  = Get-Date
     $dayKey = $today.ToString('yyyy-MM-dd')
     $t = 0
     if ($State.days.ContainsKey($dayKey)) { $t = $State.days[$dayKey] }
-    $w = Get-WeekCount $State.days $today
-    Write-Display ('{0}{1} {2}{3} {4}{5}{6}' -f `
-        $LabelToday, $t, $LabelWeek, $w, $LabelTotal, $State.total, $CatimeTag)
+    $w = Get-WeekCount  $State.days $today
+    $mo = Get-MonthCount $State.days $today
+    Write-Display ('{0}{1} {2}{3} {4}{5} {6}{7}{8}' -f `
+        $LabelToday, $t, $LabelWeek, $w, $LabelMonth, $mo, $LabelTotal, $State.total, $CatimeTag)
 }
 
 # ---------------- 阶段完成处理 ----------------
 
 function Invoke-PhaseComplete {
-    param($State, $Pattern, $WorkMask)
+    param($State, $Pattern, $WorkMask, $LoopCount)
 
     $now    = Get-Date
     $n      = $Pattern.Count
@@ -341,6 +372,16 @@ function Invoke-PhaseComplete {
         $State.days[$dayKey]++
         Write-Log ("计 1 个番茄(口径={0}): total={1}" -f $CountUnit, $State.total)
     }
+    # 推断"下一段计时"的结束时刻（Catime 番茄钟各段无缝衔接），供 $TimerDisplayMode='timer' 使用
+    if ($idx -eq ($n - 1)) { $script:CyclesDone++ }
+    if (($idx -eq ($n - 1)) -and ($script:CyclesDone -ge $LoopCount)) {
+        # 整轮循环已跑完 → Catime 停表，之后不再有计时
+        $script:TimerEndsAt = $null
+    }
+    else {
+        $script:TimerEndsAt = $now.AddSeconds($Pattern[($idx + 1) % $n])
+    }
+
     Save-State $State
     if ($isCounted) { Refresh-Display $State }
 }
@@ -355,6 +396,9 @@ $state      = Load-State
 $lastToast  = [IntPtr]::Zero
 $hintShown  = $false
 $loggedErr  = @{}
+$script:TimerEndsAt = $null   # 推断的"当前这段计时结束时刻"（$TimerDisplayMode='timer' 用）
+$script:CyclesDone  = 0       # 本次运行中已跑完的循环数
+$timerOnlyShown     = $false  # 当前是否处于"只显示计时"状态
 
 Write-Log ("启动: PS={0} 配置={1} 类型={2} 阶段序列={3}" -f `
     $PSVersionTable.PSVersion, $ConfigFile, $cfg.Type, ($cfg.Pattern -join ','))
@@ -404,10 +448,19 @@ while ($true) {
             if ($h -ne [IntPtr]::Zero -and $h -ne $lastToast) {
                 # 出现新的 toast 窗口 = 一个番茄钟阶段刚刚完成
                 $lastToast = $h
-                Invoke-PhaseComplete $state $cfg.Pattern $workMask
+                Invoke-PhaseComplete $state $cfg.Pattern $workMask $cfg.LoopCount
             }
             elseif ($h -eq [IntPtr]::Zero) {
                 $lastToast = [IntPtr]::Zero
+            }
+
+            # $TimerDisplayMode='timer'：推断的计时窗口开/关时切换显示
+            if ($TimerDisplayMode -eq 'timer') {
+                $running = ($script:TimerEndsAt -ne $null) -and ((Get-Date) -lt $script:TimerEndsAt)
+                if ($running -ne $timerOnlyShown) {
+                    $timerOnlyShown = $running
+                    Refresh-Display $state
+                }
             }
         }
     }

@@ -40,6 +40,17 @@
 - 通知弹窗：`CatimeNotificationClass`（标题 `Catime Notification`）
 - 通知类型 `CATIME` 时，每个阶段完成都会创建该窗口；`NOTIFICATION_TIMEOUT_MS` 决定存活时长。
 
+**缩放与位置（`config.ini [Display]`）**
+- `WINDOW_SCALE`：正常时间显示的缩放；`PLUGIN_SCALE`：**插件模式的独立缩放档位**
+  （渲染时 `PluginData_IsActive() ? PLUGIN_FONT_SCALE_FACTOR : CLOCK_FONT_SCALE_FACTOR`，
+  `drawing_render.c:684`）。默认 `1.0`，因此插件显示常比正常时间小很多。
+- 位置 `CLOCK_WINDOW_POS_X/Y` 两种模式共用；在插件模式下缩放/拖动会写回 `PLUGIN_SCALE` 与位置
+  （`window_core.c` / `drag_scale.c`）。
+- 本机：`WINDOW_SCALE=11.48`、`PLUGIN_SCALE` 原为 `1.00` → 2026-10-12 调整为 `3.00`
+  （按可视宽度估算：插件文本约 19 字符 vs 正常显示 5 字符）。
+- 插件文本支持标签：`<fps:N>` `<catime>` `<exit>N` `<color:>` `<font:路径>` `<md>` `![](图片)`
+  —— **没有字号标签**，字号只能通过缩放的粒度控制。
+
 ## 3. 番茄钟语义（源码结论）
 
 - `complete_pomodoro_cycles` 是**进程内内存变量**（`timer_events_state.c`），
@@ -63,7 +74,8 @@
 | 计数口径 | `$CountUnit = 'work'`（**用户 2026-10-12 定案**：每完成一个工作阶段计 1 个，即正统番茄工作法口径）。另有 `'cycle'`（整轮含休息计 1，Catime `complete_pomodoro_cycles` 口径），改一行即可切换，两种口径各测 6/6 |
 | 新会话判定 | 间隔 > 2×最长阶段 + 300s → 视为重新开始，刚完成的算第 1 个（工作）阶段 |
 | 持久化 | 脚本同级 `pomodoro_stats.json`（原子写：临时文件 + `Move-Item`），明细保留 400 天 |
-| 显示 | `<fps:1>T{今日} W{本周} A{累计}  <catime></catime>`；标签可在脚本顶部改 |
+| 显示 | `<fps:1>T{今日} W{本周} M{本月} A{累计}  <catime></catime>`；标签可在脚本顶部改 |
+| 显示模式 | `$TimerDisplayMode`：`'both'`（默认，始终"统计+计时"）/ `'timer'`（推断计时期间只显示计时）。**Catime 不提供"计时开始"信号**（计时开始不写 config、不建窗口、无 IPC，已核对 v1.5.0 源码），故 `'timer'` 只能靠"上次完成 + 段时长"推断 → 第 1 段切不了、手动中断后要等该段预期结束才恢复统计 |
 | 门禁 | `NOTIFICATION_TYPE != CATIME` → 显示 `SET CATIME` 且不计数 |
 | 日志 | `pomodoro_stats.log`：启动参数、每次计数、循环异常（同类只记一次，>64KB 重建） |
 | 资源占用 | 每 500ms 一次 `EnumWindows`（微秒级）；仅事件发生时写盘；无网络 |

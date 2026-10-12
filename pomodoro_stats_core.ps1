@@ -52,6 +52,7 @@ $ToastClass = 'CatimeNotificationClass'
 $ScriptDir  = $PSScriptRoot
 $OutputFile = Join-Path $ScriptDir 'output.txt'
 $StateFile  = Join-Path $ScriptDir 'pomodoro_stats.json'
+$LogFile    = Join-Path $ScriptDir 'pomodoro_stats.log'
 
 # 插件目录为 <Catime根目录>\resources\plugins，故根目录为上两级
 $CatimeRoot = Split-Path (Split-Path $ScriptDir -Parent) -Parent
@@ -202,6 +203,25 @@ function Write-Display {
     catch { }
 }
 
+function Write-Log {
+    param([string]$Message)
+    try {
+        if ((Test-Path -LiteralPath $LogFile) -and
+            (Get-Item -LiteralPath $LogFile).Length -gt 65536) {
+            Remove-Item -LiteralPath $LogFile -Force -ErrorAction SilentlyContinue
+        }
+        Add-Content -LiteralPath $LogFile -Encoding UTF8 -Value (
+            "{0}  {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message)
+    }
+    catch { }
+}
+
+# 显示文本末尾必须带 <catime></catime>：
+# Catime 在开始计时/番茄钟时会停掉所有插件并关闭插件显示，
+# 只有输出中含该标签的插件会被保留（源码 window_procedure.c: CleanupBeforeTimerAction）。
+# 该标签处会渲染当前计时/时间，因此插件模式下也能看到倒计时。
+$CatimeTag = '  <catime></catime>'
+
 function Refresh-Display {
     param($State)
     $today  = Get-Date
@@ -209,7 +229,8 @@ function Refresh-Display {
     $t = 0
     if ($State.days.ContainsKey($dayKey)) { $t = $State.days[$dayKey] }
     $w = Get-WeekCount $State.days $today
-    Write-Display ('{0}{1} {2}{3} {4}{5}' -f $LabelToday, $t, $LabelWeek, $w, $LabelTotal, $State.total)
+    Write-Display ('{0}{1} {2}{3} {4}{5}{6}' -f `
+        $LabelToday, $t, $LabelWeek, $w, $LabelTotal, $State.total, $CatimeTag)
 }
 
 # ---------------- 阶段完成处理 ----------------
@@ -264,6 +285,7 @@ function Invoke-PhaseComplete {
         $dayKey = $now.ToString('yyyy-MM-dd')
         if (-not $State.days.ContainsKey($dayKey)) { $State.days[$dayKey] = 0 }
         $State.days[$dayKey]++
+        Write-Log ("完成工作阶段: total={0}" -f $State.total)
     }
     Save-State $State
     if ($isWork) { Refresh-Display $State }
@@ -276,11 +298,15 @@ $cfgMtime   = if ($ConfigFile) { (Get-Item -LiteralPath $ConfigFile).LastWriteTi
 $state      = Load-State
 $lastToast  = [IntPtr]::Zero
 $hintShown  = $false
+$loggedErr  = @{}
+
+Write-Log ("启动: PS={0} 配置={1} 类型={2} 阶段序列={3}" -f `
+    $PSVersionTable.PSVersion, $ConfigFile, $cfg.Type, ($cfg.Pattern -join ','))
 
 # 启动时立即写一次，避免 Catime 窗口空白
 Save-State $state
 if ($cfg.Type -ne 'CATIME') {
-    Write-Display 'SET CATIME'
+    Write-Display ('SET CATIME' + $CatimeTag)
     $hintShown = $true
 }
 else {
@@ -295,13 +321,14 @@ while ($true) {
             if ($m -ne $cfgMtime) {
                 $cfgMtime = $m
                 $cfg      = Read-CatimeConfig
+                Write-Log ("配置已重载: 类型={0} 阶段序列={1}" -f $cfg.Type, ($cfg.Pattern -join ','))
             }
         }
 
         if ($cfg.Type -ne 'CATIME') {
             # 通知类型不是 CATIME 时无法可靠检测阶段完成，显示设置提示
             if (-not $hintShown) {
-                Write-Display 'SET CATIME'
+                Write-Display ('SET CATIME' + $CatimeTag)
                 $hintShown = $true
             }
         }
@@ -321,6 +348,13 @@ while ($true) {
             }
         }
     }
-    catch { }
+    catch {
+        # 同类错误只记一次，避免刷日志
+        $msg = $_.Exception.Message
+        if (-not $loggedErr.ContainsKey($msg)) {
+            $loggedErr[$msg] = $true
+            Write-Log ("循环异常: {0}" -f $msg)
+        }
+    }
     Start-Sleep -Milliseconds $PollMs
 }

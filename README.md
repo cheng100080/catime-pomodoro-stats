@@ -3,7 +3,8 @@
 在 Catime 窗口实时显示**今日 / 本周 / 累计**完成的番茄数，数据持久化，Catime 重启不丢失。
 
 ```
-T3 W12 A57        T = 今日(Today)   W = 本周(Week，周一起算)   A = 累计(All)
+T3 W12 A57  00:10        T = 今日(Today)   W = 本周(Week，周一起算)   A = 累计(All)
+                        末尾是当前倒计时/时间（见下文「为什么输出里有 <catime> 标签」）
 ```
 
 ---
@@ -33,7 +34,25 @@ T3 W12 A57        T = 今日(Today)   W = 本周(Week，周一起算)   A = 累�
 > 若为 `OS`（操作系统通知）或 `SYSTEM_MODAL`，插件无法可靠感知阶段完成事件，
 > 会显示 `SET CATIME` 提示而不计数。原因见下文「为什么必须用 CATIME 通知类型」。
 
-### 为什么要多一个 `.bat` 入口？
+### 为什么输出里有 `<catime>` 标签（很重要）
+
+Catime 在**开始任何计时动作时**（按倒计时、启动番茄钟）会做一次清理：
+
+```c
+void CleanupBeforeTimerAction(void) {
+    ...
+    if (!PluginData_HasCatimeTag()) {
+        PluginManager_StopAllPlugins();   // 没有 <catime> 标签 → 停掉所有插件、关闭插件显示
+    }
+}
+```
+
+也就是说：输出里**不带 `<catime>` 标签的插件，会在你一开始计时时被直接杀掉**，
+表现为"启动倒计时后插件显示消失、完成阶段也统计不到"。
+因此本插件在输出末尾固定带上 `<catime></catime>`；Catime 会在该位置渲染当前计时/时间，
+副作用是插件模式下也能看到倒计时，正好补上被插件文本挡住的计时显示。
+
+### 为什么多一个 `.bat` 入口
 
 Catime 启动 `.ps1` 插件时执行的是 `powershell.exe -NoProfile ... -File 脚本`，**靠 PATH
 环境变量找 `powershell.exe`**。而 `powershell.exe` 位于
@@ -54,6 +73,8 @@ Catime 启动 `.ps1` 插件时执行的是 `powershell.exe -NoProfile ... -File 
 - `pomodoro_stats.json`：与脚本同目录，保存累计数、每日明细与阶段索引。
   删除该文件即可把统计清零。
 - `output.txt`：与脚本同目录，Catime 实时读取该文件用于显示。
+- `pomodoro_stats.log`：与脚本同目录，记录启动参数、每次计数、以及循环中的异常
+  （超过 64KB 自动重建）。正常使用下每天只增加几行。
 - 明细超过 400 天的旧记录会被自动清理。
 
 ## 工作原理
@@ -109,10 +130,12 @@ Catime 启动 `.ps1` 插件时执行的是 `powershell.exe -NoProfile ... -File 
 | 现象 | 原因 / 处理 |
 |---|---|
 | 窗口显示 `powershell.exe not found` | 误点了 `pomodoro_stats_core.ps1`。点 `pomodoro_stats.bat` 那个入口 |
+| 一开始倒计时插件就没了、显示变空白 | 旧版本问题，已修复（输出末尾带 `<catime>` 标签）；重新点一次 `pomodoro_stats.bat` 即可 |
 | 窗口显示 `SET CATIME` | 通知类型不是 `CATIME`（见上文前置条件）；改完保存即生效 |
 | 通知弹出了但数字不动 | 插件没在运行：托盘右键 → `插件`，确认 `pomodoro_stats.bat` 前有 ✓ |
 | 菜单里列出两个 `pomodoro_stats*` | 正常，`.bat` 是入口，`..._core.ps1` 是逻辑文件 |
 | 想清零统计 | 删除插件目录下的 `pomodoro_stats.json` |
+| 想查原因 | 看同目录的 `pomodoro_stats.log`（启动参数、计数、异常） |
 
 ## License
 

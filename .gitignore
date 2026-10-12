@@ -12,3 +12,4 @@ pomodoro_stats.json
 
 # 临时测试脚本与结果（保留在本地，不入库）
 _tmp/
+pomodoro_stats.log

@@ -501,7 +501,7 @@ function Refresh-Display {
                  ((Get-Date) -lt $script:TimerEndsAt)
 
     if ($timerOnly) {
-        if ($DisplayLayout -eq 'stacked') { Write-Display '<md># <catime></catime></md>' }
+        if ($DisplayLayout -eq 'stacked') { Write-Display '<catime></catime>' }
         else { Write-Display '<catime></catime>' }
         return
     }
@@ -523,12 +523,13 @@ function Refresh-Display {
     if ($DisplayLayout -eq 'stacked') {
         # 优先用图片渲染统计行（可任意小、行距可贴近）；失败则回退到 markdown 标题分级
         $img = Update-StatsImage $line $cfg
+        $zwsp = [string][char]0x200B   # 零宽空格：不可见，但能让"图片行"成为独立一行
+        # 注意：<catime> 必须放在 <md> 之外 —— 实测放在 markdown 内不会渲染！
         if ($img) {
-            $zwsp = [string][char]0x200B   # 零宽空格：不可见，但能让"图片行"成为独立一行
-            Write-Display ("<md>![{0}]({1}){2}`n# <catime></catime></md>" -f $img, $script:StatsImgName, $zwsp)
+            Write-Display ("<md>![{0}]({1}){2}</md>`n<catime></catime>" -f $img, $script:StatsImgName, $zwsp)
         }
         else {
-            Write-Display ("<md>###### {0}`n# <catime></catime></md>" -f $line)
+            Write-Display ("<md>###### {0}{1}</md>`n<catime></catime>" -f $line, $zwsp)
         }
     }
     else {

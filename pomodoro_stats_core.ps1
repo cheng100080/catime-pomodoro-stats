@@ -46,6 +46,19 @@ $LabelTotal = 'A'
 #   'cycle' = 走完"一整轮"阶段序列（含休息）才计 1 个（即 Catime 内部 complete_pomodoro_cycles 的口径）
 $CountUnit = 'work'
 
+# 阶段类型模板：按 config.ini 里 POMODORO_TIME_OPTIONS 的顺序，逐段标注
+#   'W' = 工作阶段   'B' = 休息阶段
+# 例：序列 45m,10m,45m,20m → 'WBWB'；序列 10m,5m,10m → 'WBW'
+#
+# 留空（默认）= 自动模式：按 Catime 的常见约定，第 1、3、5… 段视为工作阶段
+#                （即以工作阶段开始、工作与休息交替）
+#
+# 说明：Catime 内部并不记录"工作/休息"属性（源码里该字段只会是 IDLE 或 WORK），
+# 通知文本也只含时长与轮次，因此工作/休息完全靠用户约定。若你的序列不符合
+# 上述约定（例如以休息段开始、或连续两段工作），在这里显式写出模板最可靠；
+# 模板长度与序列长度不一致时会自动回退到自动模式，并在日志中记录。
+$PhaseTypes = ''
+
 # 轮询间隔（毫秒）。Catime 默认 toast 显示 3 秒以上，500ms 足够捕捉。
 $PollMs = 500
 
@@ -130,6 +143,37 @@ function Read-CatimeConfig {
     }
     catch { }
     return $result
+}
+
+# ---------------- 阶段类型判定（工作 / 休息） ----------------
+
+function Get-WorkMask {
+    <#
+      返回 @{ Mask = @($true,$false,...); Source = '说明' }
+      Mask 与阶段序列逐段对应：$true = 工作阶段（计数），$false = 休息阶段（不计数）。
+      优先采用显式模板 $PhaseTypes；为空或长度与序列不一致时回退到自动模式。
+    #>
+    param($Pattern, [string]$Types)
+
+    $t = ''
+    if ($Types) { $t = ($Types -replace '[^WwBb]', '').ToUpper() }
+
+    if ($t.Length -gt 0 -and $t.Length -eq $Pattern.Count) {
+        $mask = @()
+        foreach ($c in $t.ToCharArray()) { $mask += ($c -eq 'W') }
+        return @{ Mask = $mask; Source = ('显式模板 ' + $t) }
+    }
+
+    if ($t.Length -gt 0) {
+        $why = ('显式模板长度 {0} 与序列长度 {1} 不一致，已回退自动模式' -f $t.Length, $Pattern.Count)
+    }
+    else {
+        $why = '自动模式（第 1、3、5… 段 = 工作阶段）'
+    }
+
+    $mask = @()
+    for ($i = 0; $i -lt $Pattern.Count; $i++) { $mask += (($i % 2) -eq 0) }
+    return @{ Mask = $mask; Source = $why }
 }
 
 # ---------------- 状态持久化 ----------------
@@ -241,7 +285,7 @@ function Refresh-Display {
 # ---------------- 阶段完成处理 ----------------
 
 function Invoke-PhaseComplete {
-    param($State, $Pattern)
+    param($State, $Pattern, $WorkMask)
 
     $now    = Get-Date
     $n      = $Pattern.Count
@@ -254,9 +298,8 @@ function Invoke-PhaseComplete {
         $maxDur = ($Pattern | Measure-Object -Maximum).Maximum
         if ($gap -gt (2 * $maxDur + 300)) {
             # 距上次完成间隔远超任何一个阶段时长：视为重新开始了新的番茄钟，
-            # 则刚完成的是新循环的第 1 个阶段（工作阶段）
+            # 则刚完成的是新序列的第 1 段（类型由阶段类型模板决定）
             $idx = 0
-            $isWork = $true
         }
         else {
             # 用间隔匹配阶段时长（容忍暂停造成的偏差），实现阶段索引自纠正
@@ -274,13 +317,11 @@ function Invoke-PhaseComplete {
             # 多个阶段时长相同（如 25,5,25,10）时，优先保持与当前索引连续，防止索引漂移
             if ($best -ge 0 -and $curErr -le $bestErr + 2.0) { $best = $idx }
             if ($best -ge 0) { $idx = $best }
-            # 匹配失败时保留顺序索引；阶段序列第 1、3、5... 个为工作阶段
-            $isWork = ($idx % 2 -eq 0)
         }
     }
-    else {
-        $isWork = ($idx % 2 -eq 0)
-    }
+
+    # 工作/休息由阶段类型模板决定（见 Get-WorkMask）
+    $isWork = [bool]$WorkMask[$idx]
 
     # 计数口径：work = 每个工作阶段；cycle = 整轮序列走完（刚完成的是序列最后一段）
     $isCounted = if ($CountUnit -eq 'cycle') { ($idx -eq ($n - 1)) } else { $isWork }
@@ -303,6 +344,8 @@ function Invoke-PhaseComplete {
 
 $cfg        = Read-CatimeConfig
 $cfgMtime   = if ($ConfigFile) { (Get-Item -LiteralPath $ConfigFile).LastWriteTime } else { $null }
+$workMask   = (Get-WorkMask $cfg.Pattern $PhaseTypes).Mask
+$maskSource = (Get-WorkMask $cfg.Pattern $PhaseTypes).Source
 $state      = Load-State
 $lastToast  = [IntPtr]::Zero
 $hintShown  = $false
@@ -310,6 +353,8 @@ $loggedErr  = @{}
 
 Write-Log ("启动: PS={0} 配置={1} 类型={2} 阶段序列={3}" -f `
     $PSVersionTable.PSVersion, $ConfigFile, $cfg.Type, ($cfg.Pattern -join ','))
+Write-Log ("阶段类型: {0} → {1}（{2}）" -f `
+    ($cfg.Pattern -join ','), (($workMask | ForEach-Object { if ($_) { 'W' } else { 'B' } }) -join ''), $maskSource)
 
 # 启动时立即写一次，避免 Catime 窗口空白
 Save-State $state
@@ -329,7 +374,12 @@ while ($true) {
             if ($m -ne $cfgMtime) {
                 $cfgMtime = $m
                 $cfg      = Read-CatimeConfig
+                $wm       = Get-WorkMask $cfg.Pattern $PhaseTypes
+                $workMask   = $wm.Mask
+                $maskSource = $wm.Source
                 Write-Log ("配置已重载: 类型={0} 阶段序列={1}" -f $cfg.Type, ($cfg.Pattern -join ','))
+                Write-Log ("阶段类型: {0}（{1}）" -f `
+                    (($workMask | ForEach-Object { if ($_) { 'W' } else { 'B' } }) -join ''), $maskSource)
             }
         }
 
@@ -349,7 +399,7 @@ while ($true) {
             if ($h -ne [IntPtr]::Zero -and $h -ne $lastToast) {
                 # 出现新的 toast 窗口 = 一个番茄钟阶段刚刚完成
                 $lastToast = $h
-                Invoke-PhaseComplete $state $cfg.Pattern
+                Invoke-PhaseComplete $state $cfg.Pattern $workMask
             }
             elseif ($h -eq [IntPtr]::Zero) {
                 $lastToast = [IntPtr]::Zero

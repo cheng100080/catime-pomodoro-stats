@@ -112,7 +112,6 @@ $ScriptDir  = $PSScriptRoot
 $OutputFile = Join-Path $ScriptDir 'output.txt'
 $StateFile  = Join-Path $ScriptDir 'pomodoro_stats.json'
 $LogFile    = Join-Path $ScriptDir 'pomodoro_stats.log'
-$StatsImageFile = Join-Path $ScriptDir 'stats.png'
 
 # 插件目录为 <Catime根目录>\resources\plugins，故根目录为上两级
 $CatimeRoot = Split-Path (Split-Path $ScriptDir -Parent) -Parent
@@ -442,17 +441,24 @@ function Update-StatsImage {
 
     if (-not $StatsAsImage) { return '' }
     $key = ('{0}|{1}|{2}|{3}' -f $Text, $Cfg.FontFile, $Cfg.TextColor, $StatsImageScreenPx)
-    if ($script:StatsImgKey -eq $key -and $script:StatsImgSize -and
-        (Test-Path -LiteralPath $StatsImageFile)) {
+    if ($script:StatsImgKey -eq $key -and $script:StatsImgSize -and $script:StatsImgName -and
+        (Test-Path -LiteralPath (Join-Path $ScriptDir $script:StatsImgName))) {
         return $script:StatsImgSize
     }
 
     $size = ''
-    try {
-        $size = [PomStat.Win]::RenderStatsImage($Text, [string]$Cfg.FontFile,
-                    [string]$Cfg.TextColor, [int]$StatsImageScreenPx, $StatsImageFile)
+    $usedName = ''
+    # 固定两个文件名轮换（不累积文件）；若 Catime 正持有其中一个，就写另一个
+    foreach ($name in @('stats.png', 'stats_b.png')) {
+        $path = Join-Path $ScriptDir $name
+        $r = ''
+        try {
+            $r = [PomStat.Win]::RenderStatsImage($Text, [string]$Cfg.FontFile,
+                        [string]$Cfg.TextColor, [int]$StatsImageScreenPx, $path)
+        }
+        catch { $r = '' }
+        if ($r) { $size = $r; $usedName = $name; break }
     }
-    catch { $size = '' }
 
     if (-not $size) {
         Write-Log '统计行图片生成失败，本次回退为文字显示'
@@ -475,6 +481,7 @@ function Update-StatsImage {
 
     $script:StatsImgKey  = $key
     $script:StatsImgSize = $spec
+    $script:StatsImgName = $usedName
     return $spec
 }
 
@@ -507,7 +514,7 @@ function Refresh-Display {
         # 优先用图片渲染统计行（可任意小、行距可贴近）；失败则回退到 markdown 标题分级
         $img = Update-StatsImage $line $cfg
         if ($img) {
-            Write-Display ("<md>![{0}](stats.png)`n# <catime></catime></md>" -f $img)
+            Write-Display ("<md>![{0}]({1})`n# <catime></catime></md>" -f $img, $script:StatsImgName)
         }
         else {
             Write-Display ("<md>###### {0}`n# <catime></catime></md>" -f $line)

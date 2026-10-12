@@ -63,6 +63,13 @@ $AnchorMarginY = 0
 #   'single'  = 单行：统计 + 计时排在同一行
 $DisplayLayout = 'stacked'
 
+# 统计行是否渲染成图片：
+#   $false = 普通文字（受 Catime 字号档位限制：统计最小只能到计时的 60%）
+#   $true  = 由插件画成 PNG 贴在计时上方（可任意小、行距可压到很紧；
+#            字体与配色自动跟随 Catime 当前设置；仅在计数变化时重绘一次，开销极小）
+$StatsAsImage     = $true
+$StatsImageScreenPx = 18  # 统计行在**屏幕上**的字号（像素）；越小字越小。原文字版约 54px，1/3 即 18
+
 # 计时期间的显示：
 #   'both'  = 始终显示"统计 + 计时"（推荐：番茄钟每一段都能同时看到计时）
 #   'timer' = 推断正在计时时只显示计时，其余时间显示统计
@@ -105,6 +112,7 @@ $ScriptDir  = $PSScriptRoot
 $OutputFile = Join-Path $ScriptDir 'output.txt'
 $StateFile  = Join-Path $ScriptDir 'pomodoro_stats.json'
 $LogFile    = Join-Path $ScriptDir 'pomodoro_stats.log'
+$StatsImageFile = Join-Path $ScriptDir 'stats.png'
 
 # 插件目录为 <Catime根目录>\resources\plugins，故根目录为上两级
 $CatimeRoot = Split-Path (Split-Path $ScriptDir -Parent) -Parent
@@ -119,7 +127,7 @@ $ConfigFile = $ConfigCandidates | Where-Object { Test-Path -LiteralPath $_ } | S
 # 说明：经实测，FindWindowW 按类名查找对非本进程注册的窗口类不可靠
 # （返回 0），而 EnumWindows + GetClassName 可稳定跨进程枚举，故采用后者。
 # 注意：-MemberDefinition 模式下代码位于类体内，不能用 using 指令，需全限定名。
-Add-Type -Namespace PomStat -Name Win -MemberDefinition @'
+Add-Type -Namespace PomStat -Name Win -ReferencedAssemblies System.Drawing -MemberDefinition @'
 public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern bool EnumWindows(EnumProc lpEnumFunc, IntPtr lParam);
@@ -173,6 +181,64 @@ public static bool AnchorWindow(IntPtr hWnd, int mode, int marginX, int marginY)
     }
     return SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, 0x0001 | 0x0004 | 0x0010);
 }
+// 把一行文字渲染成透明 PNG（字体与配色跟随 Catime 当前设置），返回 "宽x高"，失败返回 ""
+public static string RenderStatsImage(string text, string fontPath, string colorSpec, int fontPx, string outPath) {
+    System.Drawing.Text.PrivateFontCollection pfc = new System.Drawing.Text.PrivateFontCollection();
+    try {
+        if (!string.IsNullOrEmpty(fontPath) && System.IO.File.Exists(fontPath)) { pfc.AddFontFile(fontPath); }
+        System.Drawing.FontFamily fam = (pfc.Families.Length > 0) ? pfc.Families[0]
+                                          : System.Drawing.FontFamily.GenericSansSerif;
+        System.Drawing.Color c1 = System.Drawing.Color.White, c2 = System.Drawing.Color.White;
+        bool g1 = TryParseHexColor(colorSpec, 0, out c1);
+        bool g2 = TryParseHexColor(colorSpec, 1, out c2);
+        if (!g1) { c1 = System.Drawing.Color.White; }
+        if (!g2) { c2 = c1; }
+        using (System.Drawing.Font font = new System.Drawing.Font(fam, (float)fontPx,
+                   System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Pixel))
+        using (System.Drawing.Bitmap probe = new System.Drawing.Bitmap(4, 4))
+        using (System.Drawing.Graphics gp = System.Drawing.Graphics.FromImage(probe)) {
+            System.Drawing.StringFormat sf = System.Drawing.StringFormat.GenericTypographic;
+            sf.FormatFlags |= System.Drawing.StringFormatFlags.MeasureTrailingSpaces;
+            System.Drawing.SizeF sz = gp.MeasureString(text, font, new System.Drawing.PointF(0f, 0f), sf);
+            int w = (int)System.Math.Ceiling(sz.Width) + 4;
+            int h = (int)System.Math.Ceiling(sz.Height) + 4;
+            if (w < 8) { w = 8; }
+            if (h < 8) { h = 8; }
+            using (System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(w, h,
+                       System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+            using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(bmp)) {
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                using (System.Drawing.Brush br = (c1 == c2)
+                           ? (System.Drawing.Brush)new System.Drawing.SolidBrush(c1)
+                           : (System.Drawing.Brush)new System.Drawing.Drawing2D.LinearGradientBrush(
+                                 new System.Drawing.Rectangle(0, 0, w, h), c1, c2, 0f)) {
+                    g.DrawString(text, font, br, 2f, 2f, sf);
+                }
+                bmp.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+            }
+            return w.ToString() + "x" + h.ToString();
+        }
+    }
+    catch (System.Exception) { return ""; }
+    finally { pfc.Dispose(); }
+}
+// 解析形如 "#89F7FE_#66A6FF" 的第 idx 段颜色（0 或 1）
+private static bool TryParseHexColor(string spec, int idx, out System.Drawing.Color c) {
+    c = System.Drawing.Color.White;
+    if (string.IsNullOrEmpty(spec)) { return false; }
+    string[] parts = spec.Split('_');
+    if (idx >= parts.Length) { return false; }
+    string t = parts[idx].Trim();
+    if (t.Length < 7 || t[0] != '#') { return false; }
+    try {
+        int r = System.Convert.ToInt32(t.Substring(1, 2), 16);
+        int g = System.Convert.ToInt32(t.Substring(3, 2), 16);
+        int b = System.Convert.ToInt32(t.Substring(5, 2), 16);
+        c = System.Drawing.Color.FromArgb(255, r, g, b);
+        return true;
+    }
+    catch (System.Exception) { return false; }
+}
 '@
 
 # ---------------- 配置读取 ----------------
@@ -183,7 +249,8 @@ function Read-CatimeConfig {
         @{ Type = 'CATIME'|'OS'|'SYSTEM_MODAL'; Pattern = @(工作秒,休息秒,...) }
       读取失败时返回默认值（与 Catime 内置默认一致）。
     #>
-    $result = @{ Type = 'CATIME'; Pattern = @(1500, 300, 1500, 600); LoopCount = 1 }
+    $result = @{ Type = 'CATIME'; Pattern = @(1500, 300, 1500, 600); LoopCount = 1
+                 FontFile = ''; TextColor = ''; PluginScale = 1.0 }
     if (-not $ConfigFile) { return $result }
     try {
         $section = ''
@@ -200,6 +267,21 @@ function Read-CatimeConfig {
             $val = $t.Substring($eq + 1).Trim()
             if ($section -eq 'Notification' -and $key -eq 'NOTIFICATION_TYPE' -and $val) {
                 $result.Type = $val.ToUpper()
+            }
+            elseif ($section -eq 'Display' -and $key -eq 'FONT_FILE_NAME' -and $val) {
+                # 供"统计行图片"使用：与时钟保持同一字体
+                $fp = [System.Environment]::ExpandEnvironmentVariables($val)
+                if (-not [System.IO.Path]::IsPathRooted($fp)) { $fp = Join-Path $CatimeRoot $fp }
+                $result.FontFile = $fp
+            }
+            elseif ($section -eq 'Display' -and $key -eq 'CLOCK_TEXT_COLOR' -and $val) {
+                # 供"统计行图片"使用：与时钟保持同一配色
+                $result.TextColor = $val
+            }
+            elseif ($section -eq 'Display' -and $key -eq 'PLUGIN_SCALE' -and $val) {
+                # 图片会被 Catime 按此缩放放大，输出尺寸要除回去才能 1:1 显示
+                $sc = 0.0
+                if ([double]::TryParse($val, [ref]$sc) -and $sc -gt 0) { $result.PluginScale = $sc }
             }
             elseif ($section -eq 'Pomodoro' -and $key -eq 'POMODORO_LOOP_COUNT') {
                 if ($val -match '^\d+$' -and [int]$val -ge 1) { $result.LoopCount = [int]$val }
@@ -354,6 +436,48 @@ function Write-Log {
 # 该标签处会渲染当前计时/时间，因此插件模式下也能看到倒计时。
 $CatimeTag = '  <catime></catime>'
 
+function Update-StatsImage {
+    <# 把统计行渲染成 PNG；内容/字体/配色未变时复用上次结果（不重复绘制） #>
+    param([string]$Text, $Cfg)
+
+    if (-not $StatsAsImage) { return '' }
+    $key = ('{0}|{1}|{2}|{3}' -f $Text, $Cfg.FontFile, $Cfg.TextColor, $StatsImageScreenPx)
+    if ($script:StatsImgKey -eq $key -and $script:StatsImgSize -and
+        (Test-Path -LiteralPath $StatsImageFile)) {
+        return $script:StatsImgSize
+    }
+
+    $size = ''
+    try {
+        $size = [PomStat.Win]::RenderStatsImage($Text, [string]$Cfg.FontFile,
+                    [string]$Cfg.TextColor, [int]$StatsImageScreenPx, $StatsImageFile)
+    }
+    catch { $size = '' }
+
+    if (-not $size) {
+        Write-Log '统计行图片生成失败，本次回退为文字显示'
+        $script:StatsImgKey = ''
+        $script:StatsImgSize = ''
+        return ''
+    }
+
+    # Catime 会把图片按 PLUGIN_SCALE 放大，所以输出尺寸要除以它，才能 1:1 清晰显示
+    $sc = [double]$Cfg.PluginScale
+    if ($sc -le 0) { $sc = 1.0 }
+    $spec = ''
+    try {
+        $wh = $size.Split('x')
+        $sw = [int][math]::Max(1, [math]::Round(([double]$wh[0]) / $sc))
+        $sh = [int][math]::Max(1, [math]::Round(([double]$wh[1]) / $sc))
+        $spec = '{0}x{1}' -f $sw, $sh
+    }
+    catch { $spec = $size }
+
+    $script:StatsImgKey  = $key
+    $script:StatsImgSize = $spec
+    return $spec
+}
+
 function Refresh-Display {
     param($State)
     $timerOnly = ($TimerDisplayMode -eq 'timer') -and ($script:TimerEndsAt -ne $null) -and
@@ -380,8 +504,14 @@ function Refresh-Display {
     $line = $parts -join ' '
 
     if ($DisplayLayout -eq 'stacked') {
-        # 第一行：小字统计（六级标题 = 基准×0.9）；第二行：大字计时（一级标题 = 基准×1.5）
-        Write-Display ("<md>###### {0}`n# <catime></catime></md>" -f $line)
+        # 优先用图片渲染统计行（可任意小、行距可贴近）；失败则回退到 markdown 标题分级
+        $img = Update-StatsImage $line $cfg
+        if ($img) {
+            Write-Display ("<md>![{0}](stats.png)`n# <catime></catime></md>" -f $img)
+        }
+        else {
+            Write-Display ("<md>###### {0}`n# <catime></catime></md>" -f $line)
+        }
     }
     else {
         Write-Display ($line + $CatimeTag)

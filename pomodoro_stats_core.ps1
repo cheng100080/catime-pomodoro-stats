@@ -68,7 +68,7 @@ $DisplayLayout = 'stacked'
 #   $true  = 由插件画成 PNG 贴在计时上方（可任意小、行距可压到很紧；
 #            字体与配色自动跟随 Catime 当前设置；仅在计数变化时重绘一次，开销极小）
 $StatsAsImage     = $true
-$StatsImageScreenPx = 18  # 统计行在**屏幕上**的字号（像素）；越小字越小。原文字版约 54px，1/3 即 18
+$StatsImageScreenPx = 27  # 统计行在**屏幕上**的字号（像素）；原文字版约 54px，27 ≈ 一半
 
 # 计时期间的显示：
 #   'both'  = 始终显示"统计 + 计时"（推荐：番茄钟每一段都能同时看到计时）
@@ -514,7 +514,8 @@ function Refresh-Display {
         # 优先用图片渲染统计行（可任意小、行距可贴近）；失败则回退到 markdown 标题分级
         $img = Update-StatsImage $line $cfg
         if ($img) {
-            Write-Display ("<md>![{0}]({1})`n# <catime></catime></md>" -f $img, $script:StatsImgName)
+            $zwsp = [string][char]0x200B   # 零宽空格：不可见，但能让"图片行"成为独立一行
+            Write-Display ("<md>![{0}]({1}){2}`n# <catime></catime></md>" -f $img, $script:StatsImgName, $zwsp)
         }
         else {
             Write-Display ("<md>###### {0}`n# <catime></catime></md>" -f $line)

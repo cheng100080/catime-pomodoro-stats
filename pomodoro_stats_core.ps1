@@ -448,8 +448,10 @@ function Update-StatsImage {
 
     $size = ''
     $usedName = ''
-    # 固定两个文件名轮换（不累积文件）；若 Catime 正持有其中一个，就写另一个
-    foreach ($name in @('stats.png', 'stats_b.png')) {
+    # Catime 加载图片后会一直占用文件句柄（实测永久锁），因此每次用一个新文件名；
+    # 同时尽力清理旧图（被占用的删不掉，留给下次 Catime 重启后由本函数清掉）
+    $stamp = (Get-Date).ToString('HHmmss') + ([int](Get-Random -Maximum 99)).ToString('00')
+    foreach ($name in @(('stats_{0}.png' -f $stamp), ('stats_{0}b.png' -f $stamp))) {
         $path = Join-Path $ScriptDir $name
         $r = ''
         try {
@@ -458,6 +460,14 @@ function Update-StatsImage {
         }
         catch { $r = '' }
         if ($r) { $size = $r; $usedName = $name; break }
+    }
+    if ($usedName) {
+        try {
+            Get-ChildItem -LiteralPath $ScriptDir -Filter 'stats*.png' |
+                Where-Object { $_.Name -ne $usedName } |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+        catch { }
     }
 
     if (-not $size) {

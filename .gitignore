@@ -7,3 +7,5 @@ upstream/
 # 本地运行产物
 *.log
 output.txt
+# 运行期数据
+pomodoro_stats.json

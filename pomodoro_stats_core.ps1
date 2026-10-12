@@ -142,11 +142,14 @@ public static IntPtr FindWindowByClass(string cls) {
     }, IntPtr.Zero);
     return found;
 }
-// 窗口尺寸编码成一个 long（宽<<32 | 高），便于比较是否变化
+// 窗口"指纹"：包含位置与尺寸，位置或尺寸一变就重新贴角（Catime 有时会把位置重置回配置值）
 public static long GetWindowSignature(IntPtr hWnd) {
     RECT r;
     if (!GetWindowRect(hWnd, out r)) { return 0; }
-    return ((long)(r.Right - r.Left) << 32) | (uint)(r.Bottom - r.Top);
+    long sig = (r.Right - r.Left) * 100003 + (r.Bottom - r.Top);
+    sig = sig * 100003 + r.Left;
+    sig = sig * 100003 + r.Top;
+    return sig;
 }
 // 把窗口贴到指定位置：mode 1=右下 2=左下 3=右上 4=左上 5=居中 6=绝对坐标
 public static bool AnchorWindow(IntPtr hWnd, int mode, int marginX, int marginY) {

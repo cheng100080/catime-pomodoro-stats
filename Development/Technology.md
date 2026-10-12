@@ -56,9 +56,15 @@
 - 尺寸：`NOTIFICATION_WINDOW_WIDTH` 350~1600、`_HEIGHT` 48~900（`ClampNotificationWidth/Height`）；
   未配置时宽度按文本自动算、高度固定 80。
 - 字号：`NOTIFICATION_FONT_SIZE` 是**窗口高度的百分比**，范围 10~60（60 即上限）→ 想放大字只能调高窗口高度。
-- 位置：`NOTIFICATION_WINDOW_X/Y` ≥ 0 时用该绝对坐标（**不做边界钳制**，给大了会出屏）；
+- 位置：`NOTIFICATION_WINDOW_X/Y` ≥ 0 时用该**左上角绝对坐标**（**不做边界钳制**，给大了会出屏）；
   否则 `CalculateNotificationPosition` = 工作区右下角减 `NOTIFICATION_RIGHT/BOTTOM_MARGIN`(20)。
-- 本机原为 `350×80 @ (2190,1404)`（宽度正好是最小值）→ 2026-10-12 调整为 `720×140`、`X=Y=-1`（自动右下角）。
+- **只有一行文字**（`NOTIFICATION_HEIGHT 80 — Fixed height accommodates single-line content`），
+  字号 = 高度 × `NOTIFICATION_FONT_SIZE`(10~60%)，宽度上限 1600 →
+  **高度变大 → 字号变大 → 长消息会被省略号截断**；要让长消息完整只能加宽 + 降低百分比。
+  实测字符宽 ≈ 字号 × 0.464（本机 ProFont）。
+- 本机原为 `350×80 @ (2190,1404)`（宽度正好是最小值，导致长消息截断）；
+  2026-10-12 调整为 `1600×350`、`FONT_SIZE=23`（字号 ≈80px）、位置 `(940,855)`
+  —— 实测长消息 `45m Pomodoro completed (Cycle1/1 Round 1/4)` 完整显示，且位于插件窗口上方约 215px。
 
 ## 3. 番茄钟语义（源码结论）
 

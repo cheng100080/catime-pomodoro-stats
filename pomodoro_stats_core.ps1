@@ -41,6 +41,11 @@ $LabelToday = 'T'
 $LabelWeek  = 'W'
 $LabelTotal = 'A'
 
+# 计数口径（计什么算"1 个番茄"）：
+#   'work'  = 每完成一个"工作阶段"计 1 个（正统番茄工作法：番茄 = 一个工作时段，休息不算）
+#   'cycle' = 走完"一整轮"阶段序列（含休息）才计 1 个（即 Catime 内部 complete_pomodoro_cycles 的口径）
+$CountUnit = 'work'
+
 # 轮询间隔（毫秒）。Catime 默认 toast 显示 3 秒以上，500ms 足够捕捉。
 $PollMs = 500
 
@@ -277,18 +282,21 @@ function Invoke-PhaseComplete {
         $isWork = ($idx % 2 -eq 0)
     }
 
+    # 计数口径：work = 每个工作阶段；cycle = 整轮序列走完（刚完成的是序列最后一段）
+    $isCounted = if ($CountUnit -eq 'cycle') { ($idx -eq ($n - 1)) } else { $isWork }
+
     $State.phase     = ($idx + 1) % $n
     $State.lastEvent = $now
 
-    if ($isWork) {
+    if ($isCounted) {
         $State.total++
         $dayKey = $now.ToString('yyyy-MM-dd')
         if (-not $State.days.ContainsKey($dayKey)) { $State.days[$dayKey] = 0 }
         $State.days[$dayKey]++
-        Write-Log ("完成工作阶段: total={0}" -f $State.total)
+        Write-Log ("计 1 个番茄(口径={0}): total={1}" -f $CountUnit, $State.total)
     }
     Save-State $State
-    if ($isWork) { Refresh-Display $State }
+    if ($isCounted) { Refresh-Display $State }
 }
 
 # ---------------- 主循环 ----------------

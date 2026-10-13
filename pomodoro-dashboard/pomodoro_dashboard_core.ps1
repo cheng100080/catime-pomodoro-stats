@@ -305,15 +305,19 @@ $xaml = @'
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
               <TextBlock x:Name="TodayCard" Text="0" Foreground="#2F2F2C" FontSize="20"
                          FontWeight="Bold" VerticalAlignment="Center"/>
-              <Grid Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
-                <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
-                <Path Stroke="#D94848" StrokeThickness="2"
-                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoOutline}"/>
-                <Path Stroke="#5FA85B" StrokeThickness="2"
-                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoLeaf}"/>
-              </Grid>
+              <!-- Viewbox 统一缩放：三个 Path 必须共享同一变换。
+                   若各自 Stretch=Uniform，小几何体(蒂叶)会被单独拉伸填满槽位盖住果身 -->
+              <Viewbox Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Grid Width="24" Height="24">
+                  <Path Fill="#D94848" Stretch="None" Data="{StaticResource TomatoBody}"/>
+                  <Path Stroke="#D94848" StrokeThickness="2"
+                        StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                        Stretch="None" Data="{StaticResource TomatoOutline}"/>
+                  <Path Stroke="#5FA85B" StrokeThickness="2"
+                        StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                        Stretch="None" Data="{StaticResource TomatoLeaf}"/>
+                </Grid>
+              </Viewbox>
             </StackPanel>
           </StackPanel>
         </Border>
@@ -324,15 +328,19 @@ $xaml = @'
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
               <TextBlock x:Name="WeekCard" Text="0" Foreground="#4A90D9" FontSize="20"
                          FontWeight="Bold" VerticalAlignment="Center"/>
-              <Grid Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
-                <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
-                <Path Stroke="#D94848" StrokeThickness="2"
-                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoOutline}"/>
-                <Path Stroke="#5FA85B" StrokeThickness="2"
-                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoLeaf}"/>
-              </Grid>
+              <!-- Viewbox 统一缩放：三个 Path 必须共享同一变换。
+                   若各自 Stretch=Uniform，小几何体(蒂叶)会被单独拉伸填满槽位盖住果身 -->
+              <Viewbox Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Grid Width="24" Height="24">
+                  <Path Fill="#D94848" Stretch="None" Data="{StaticResource TomatoBody}"/>
+                  <Path Stroke="#D94848" StrokeThickness="2"
+                        StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                        Stretch="None" Data="{StaticResource TomatoOutline}"/>
+                  <Path Stroke="#5FA85B" StrokeThickness="2"
+                        StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                        Stretch="None" Data="{StaticResource TomatoLeaf}"/>
+                </Grid>
+              </Viewbox>
             </StackPanel>
           </StackPanel>
         </Border>
@@ -343,15 +351,19 @@ $xaml = @'
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
               <TextBlock x:Name="MonthCard" Text="0" Foreground="#4A90D9" FontSize="20"
                          FontWeight="Bold" VerticalAlignment="Center"/>
-              <Grid Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
-                <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
-                <Path Stroke="#D94848" StrokeThickness="2"
-                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoOutline}"/>
-                <Path Stroke="#5FA85B" StrokeThickness="2"
-                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoLeaf}"/>
-              </Grid>
+              <!-- Viewbox 统一缩放：三个 Path 必须共享同一变换。
+                   若各自 Stretch=Uniform，小几何体(蒂叶)会被单独拉伸填满槽位盖住果身 -->
+              <Viewbox Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Grid Width="24" Height="24">
+                  <Path Fill="#D94848" Stretch="None" Data="{StaticResource TomatoBody}"/>
+                  <Path Stroke="#D94848" StrokeThickness="2"
+                        StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                        Stretch="None" Data="{StaticResource TomatoOutline}"/>
+                  <Path Stroke="#5FA85B" StrokeThickness="2"
+                        StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                        Stretch="None" Data="{StaticResource TomatoLeaf}"/>
+                </Grid>
+              </Viewbox>
             </StackPanel>
           </StackPanel>
         </Border>
@@ -362,15 +374,19 @@ $xaml = @'
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
               <TextBlock x:Name="TotalCard" Text="0" Foreground="#2F2F2C" FontSize="20"
                          FontWeight="Bold" VerticalAlignment="Center"/>
-              <Grid Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
-                <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
-                <Path Stroke="#D94848" StrokeThickness="2"
-                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoOutline}"/>
-                <Path Stroke="#5FA85B" StrokeThickness="2"
-                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoLeaf}"/>
-              </Grid>
+              <!-- Viewbox 统一缩放：三个 Path 必须共享同一变换。
+                   若各自 Stretch=Uniform，小几何体(蒂叶)会被单独拉伸填满槽位盖住果身 -->
+              <Viewbox Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Grid Width="24" Height="24">
+                  <Path Fill="#D94848" Stretch="None" Data="{StaticResource TomatoBody}"/>
+                  <Path Stroke="#D94848" StrokeThickness="2"
+                        StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                        Stretch="None" Data="{StaticResource TomatoOutline}"/>
+                  <Path Stroke="#5FA85B" StrokeThickness="2"
+                        StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                        Stretch="None" Data="{StaticResource TomatoLeaf}"/>
+                </Grid>
+              </Viewbox>
             </StackPanel>
           </StackPanel>
         </Border>

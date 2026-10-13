@@ -460,7 +460,11 @@ function Update-StatsImage {
     param([string]$Text, $Cfg)
 
     if (-not $StatsAsImage) { return '' }
-    $key = ('{0}|{1}|{2}|{3}' -f $Text, $Cfg.FontFile, $Cfg.TextColor, $StatsImageScreenPx)
+    # 缩放必须参与缓存键：用户在插件模式缩放时钟时 Catime 会写回 PLUGIN_SCALE，
+    # 显示尺寸 = spec × 当前缩放。缩放一变就用新缩放重算 spec，
+    # 图片才能保持固定屏幕大小（$StatsImageScreenPx），不随时钟缩放漂移。
+    $key = ('{0}|{1}|{2}|{3}|{4}' -f $Text, $Cfg.FontFile, $Cfg.TextColor,
+                $StatsImageScreenPx, $Cfg.PluginScale)
     if ($script:StatsImgKey -eq $key -and $script:StatsImgSize -and $script:StatsImgName -and
         (Test-Path -LiteralPath (Join-Path $ScriptDir $script:StatsImgName))) {
         return $script:StatsImgSize

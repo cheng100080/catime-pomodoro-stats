@@ -1,0 +1,414 @@
+﻿<#
+.SYNOPSIS
+    Catime 番茄钟显示插件（pomodoro_dashboard）
+
+.DESCRIPTION
+    统计插件（pomodoro_stats）的搭档：弹窗展示统计并可人工校准。
+
+    读取统计插件写在插件根目录的 pomodoro_stats.json：
+      展示：今日 / 本周(只读，派生) / 累计 / 近 7 天每日
+      编辑：近 7 天每日计数 + 累计（total）；保存后原子写回 json，
+            version/phase/lastEvent 原样保留（phase 动了会打乱统计插件索引）
+    保存成功后提示用户手动重新运行统计插件使修改生效（v1 无自动拉起）。
+
+    依赖：Windows 自带 PowerShell 5.1 + .NET Framework WPF，无第三方组件。
+    注意：必须以 -STA 启动（launcher 已加）；Catime 同时只跑一个插件，
+          从菜单启动本面板会自动停掉统计插件，天然避免写冲突。
+
+.NOTES
+    License: Apache-2.0
+#>
+
+#requires -version 5.1
+param([switch]$SelfTest)
+
+$ErrorActionPreference = 'Stop'
+
+# ---------------- 路径 ----------------
+
+$ScriptDir   = $PSScriptRoot
+$PluginsRoot = Split-Path $ScriptDir -Parent
+$OutputFile  = Join-Path $ScriptDir 'output.txt'
+
+# 数据文件两级候选：插件根目录（默认布局）→ LOCALAPPDATA 绝对兜底
+$StateCandidates = @(
+    (Join-Path $PluginsRoot 'pomodoro_stats.json'),
+    (Join-Path $env:LOCALAPPDATA 'Catime\resources\plugins\pomodoro_stats.json')
+)
+$StateFile = $StateCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+
+# ---------------- 基础函数 ----------------
+
+function Write-OutputText {
+    param([string]$Text)
+    try {
+        # Catime 要求 output.txt 为 UTF-8 无 BOM；末尾必须带 <catime></catime>
+        [System.IO.File]::WriteAllText($OutputFile, "<fps:1>$Text",
+            (New-Object System.Text.UTF8Encoding($false)))
+    }
+    catch { }
+}
+
+function Read-State {
+    # 返回 @{ Ok=$true; Data=json对象 } 或 @{ Ok=$false; Reason='...' }
+    # 读取失败重试 2 次（间隔 100ms），应对恰逢统计插件原子写回的瞬间
+    if (-not $StateFile) { return @{ Ok = $false; Reason = '未找到统计数据文件 pomodoro_stats.json' } }
+    for ($i = 0; $i -lt 3; $i++) {
+        try {
+            $raw = [System.IO.File]::ReadAllText($StateFile)
+            $j = $raw | ConvertFrom-Json
+            return @{ Ok = $true; Data = $j }
+        }
+        catch { Start-Sleep -Milliseconds 100 }
+    }
+    return @{ Ok = $false; Reason = '统计数据文件读取/解析失败（可能已损坏）' }
+}
+
+function Normalize-Days {
+    # 与统计插件同规则：格式合法 + 日历合法 + 非负整数，其余丢弃
+    param($Json)
+    $d = @{}
+    if ($null -eq $Json.days) { return $d }
+    foreach ($p in $Json.days.PSObject.Properties) {
+        if ($p.Name -match '^\d{4}-\d{2}-\d{2}$') {
+            try {
+                [datetime]::ParseExact($p.Name, 'yyyy-MM-dd', $null) | Out-Null
+                [int]$v = $p.Value
+                if ($v -ge 0) { $d[$p.Name] = $v }
+            }
+            catch { }
+        }
+    }
+    return $d
+}
+
+function Get-WeekStart {
+    param([datetime]$Date)
+    return $Date.Date.AddDays(-((([int]$Date.DayOfWeek) + 6) % 7))
+}
+
+function Get-WeekCount {
+    param($Days, [datetime]$Today)
+    $ws = Get-WeekStart $Today
+    $n = 0
+    foreach ($k in $Days.Keys) {
+        $dt = [datetime]::ParseExact($k, 'yyyy-MM-dd', $null)
+        if ($dt -ge $ws -and $dt -le $Today.Date) { $n += $Days[$k] }
+    }
+    return $n
+}
+
+function Save-State {
+    # 原子写：临时文件 + Move -Force；version/phase/lastEvent 原样带回
+    param($Json, $NewDays, [int]$NewTotal)
+    $obj = [ordered]@{
+        version   = $Json.version
+        total     = $NewTotal
+        phase     = $Json.phase
+        lastEvent = $Json.lastEvent
+        days      = $NewDays
+    }
+    $json = $obj | ConvertTo-Json -Depth 5 -Compress
+    $tmp  = "$StateFile.tmp"
+    [System.IO.File]::WriteAllText($tmp, $json, (New-Object System.Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $tmp -Destination $StateFile -Force
+}
+
+# ---------------- SelfTest（无头自检，不弹窗） ----------------
+
+if ($SelfTest) {
+    $r = Read-State
+    if (-not $r.Ok) { Write-Output ("SELFTEST: NODATA - " + $r.Reason); exit 0 }
+    $j    = $r.Data
+    $days = Normalize-Days $j
+    $now  = Get-Date
+    $todayKey = $now.ToString('yyyy-MM-dd')
+    $today = 0
+    if ($days.ContainsKey($todayKey)) { $today = $days[$todayKey] }
+    $week = Get-WeekCount $days $now
+    $total = 0
+    try { $total = [int]$j.total } catch { }
+    Write-Output ("SELFTEST: today={0} week={1} total={2}" -f $today, $week, $total)
+    for ($i = 0; $i -lt 7; $i++) {
+        $dk = $now.Date.AddDays(-$i).ToString('yyyy-MM-dd')
+        $c = 0
+        if ($days.ContainsKey($dk)) { $c = $days[$dk] }
+        Write-Output ("  {0} = {1}" -f $dk, $c)
+    }
+    exit 0
+}
+
+# ---------------- WPF 面板 ----------------
+
+Add-Type -AssemblyName PresentationFramework
+
+$state = Read-State
+$haveData = $state.Ok
+$j    = $null
+$days = @{}
+if ($haveData) { $j = $state.Data; $days = Normalize-Days $j }
+$now = Get-Date
+$todayKey = $now.ToString('yyyy-MM-dd')
+
+$weekCn = @('周日','周一','周二','周三','周四','周五','周六')
+
+# 面板存活期间 Catime 窗口显示 Dashboard（必须带标签，缺了会被杀）
+if ($haveData) { Write-OutputText 'Dashboard  <catime></catime>' }
+else           { Write-OutputText 'No Stats Data  <catime></catime>' }
+
+# XAML：固定深色主题 + 固定强调渐变（#89F7FE→#66A6FF），不读 config.ini
+$xaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pomodoro Dashboard" Width="480" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" FontFamily="Microsoft YaHei UI" TextOptions.TextFormattingMode="Display">
+  <Window.Resources>
+    <LinearGradientBrush x:Key="Accent" StartPoint="0,0" EndPoint="1,0">
+      <GradientStop Color="#89F7FE" Offset="0"/>
+      <GradientStop Color="#66A6FF" Offset="1"/>
+    </LinearGradientBrush>
+    <Style x:Key="NumBox" TargetType="TextBox">
+      <Setter Property="Width" Value="76"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Background" Value="#262E3E"/>
+      <Setter Property="Foreground" Value="#E8ECF4"/>
+      <Setter Property="BorderBrush" Value="#39435A"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="HorizontalAlignment" Value="Right"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Padding" Value="4,0"/>
+    </Style>
+    <Style x:Key="DayLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#B7C0D4"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="PrimaryBtn" TargetType="Button">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="#10203A"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Height" Value="38"/>
+      <Setter Property="Width" Value="200"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border CornerRadius="9" Background="{TemplateBinding Background}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="GhostBtn" TargetType="Button">
+      <Setter Property="Background" Value="#262E3E"/>
+      <Setter Property="Foreground" Value="#B7C0D4"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Height" Value="38"/>
+      <Setter Property="Width" Value="110"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border CornerRadius="9" Background="{TemplateBinding Background}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="12" Background="#1E2430" BorderBrush="#2A3242" BorderThickness="1">
+    <StackPanel Margin="24,0,24,20">
+      <!-- 标题栏（可拖动） -->
+      <Border x:Name="TitleBar" Background="{StaticResource Accent}" CornerRadius="12,12,0,0"
+              Margin="-24,0,-24,16" Padding="24,10">
+        <Grid>
+          <TextBlock Text="Pomodoro Dashboard" FontSize="15" FontWeight="Bold"
+                     Foreground="#10203A" VerticalAlignment="Center"/>
+          <Button x:Name="CloseBtn" Content="&#10005;" Width="28" Height="28"
+                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                  Background="Transparent" BorderThickness="0" Foreground="#10203A"
+                  FontSize="12" Cursor="Hand" ContentStringFormat="{}{0}"/>
+        </Grid>
+      </Border>
+      <!-- 概览卡片 -->
+      <UniformGrid Columns="3">
+        <Border Background="#262E3E" CornerRadius="9" Margin="0,0,6,0" Padding="0,12">
+          <StackPanel>
+            <TextBlock Text="今日" Foreground="#8A93A6" FontSize="12"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TodayCard" Text="0" Foreground="#E8ECF4" FontSize="26"
+                       FontWeight="Bold" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Border>
+        <Border Background="#262E3E" CornerRadius="9" Margin="6,0,6,0" Padding="0,12">
+          <StackPanel>
+            <TextBlock Text="本周" Foreground="#8A93A6" FontSize="12"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="WeekCard" Text="0" Foreground="#89F7FE" FontSize="26"
+                       FontWeight="Bold" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Border>
+        <Border Background="#262E3E" CornerRadius="9" Margin="6,0,0,0" Padding="0,12">
+          <StackPanel>
+            <TextBlock Text="累计" Foreground="#8A93A6" FontSize="12"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TotalCard" Text="0" Foreground="#E8ECF4" FontSize="26"
+                       FontWeight="Bold" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Border>
+      </UniformGrid>
+      <!-- 提示 -->
+      <TextBlock x:Name="HintText" Foreground="#8A93A6" FontSize="11" Margin="2,12,0,4"
+                 TextWrapping="Wrap" Text="校准前请先停止统计插件（从 Catime 菜单启动本面板会自动停止）。仅编辑近 7 天与累计；“本周”由每日数据自动计算。"/>
+      <!-- 近 7 天 -->
+      <TextBlock Text="近 7 天（可编辑）" Foreground="#E8ECF4" FontSize="13"
+                 FontWeight="Bold" Margin="2,4,0,6"/>
+      <StackPanel x:Name="DayRows"/>
+      <!-- 累计编辑 -->
+      <TextBlock Text="累计（可编辑）" Foreground="#E8ECF4" FontSize="13"
+                 FontWeight="Bold" Margin="2,10,0,6"/>
+      <Border Background="#262E3E" CornerRadius="9" Padding="12,8" Margin="0,0,0,14">
+        <Grid>
+          <TextBlock Text="累计完成" Style="{StaticResource DayLabel}"/>
+          <TextBox x:Name="TotalBox" Style="{StaticResource NumBox}"/>
+        </Grid>
+      </Border>
+      <!-- 按钮 -->
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+        <Button x:Name="SaveBtn" Content="保存" Style="{StaticResource PrimaryBtn}" Margin="0,0,10,0"/>
+        <Button x:Name="CancelBtn" Content="取消" Style="{StaticResource GhostBtn}"/>
+      </StackPanel>
+      <!-- 状态栏 -->
+      <TextBlock x:Name="StatusText" Foreground="#8A93A6" FontSize="12" Margin="2,12,0,0"
+                 TextWrapping="Wrap" Text=""/>
+    </StackPanel>
+  </Border>
+</Window>
+'@
+
+$window = [Windows.Markup.XamlReader]::Parse($xaml)
+
+$TitleBar  = $window.FindName('TitleBar')
+$CloseBtn  = $window.FindName('CloseBtn')
+$TodayCard = $window.FindName('TodayCard')
+$WeekCard  = $window.FindName('WeekCard')
+$TotalCard = $window.FindName('TotalCard')
+$HintText  = $window.FindName('HintText')
+$DayRows   = $window.FindName('DayRows')
+$TotalBox  = $window.FindName('TotalBox')
+$SaveBtn   = $window.FindName('SaveBtn')
+$CancelBtn = $window.FindName('CancelBtn')
+$StatusText = $window.FindName('StatusText')
+
+# ---- 生成 7 天编辑行（今天在最上） ----
+$DayBoxes = @{}   # 日期键 -> TextBox
+for ($i = 0; $i -lt 7; $i++) {
+    $dt = $now.Date.AddDays(-$i)
+    $dk = $dt.ToString('yyyy-MM-dd')
+    $c = 0
+    if ($days.ContainsKey($dk)) { $c = $days[$dk] }
+
+    $lbl = New-Object System.Windows.Controls.TextBlock
+    $lbl.Style = $window.Resources['DayLabel']
+    $name = $dt.ToString('MM-dd') + ' ' + $weekCn[[int]$dt.DayOfWeek]
+    if ($i -eq 0) { $name += '（今天）' }
+    $lbl.Text = $name
+
+    $box = New-Object System.Windows.Controls.TextBox
+    $box.Style = $window.Resources['NumBox']
+    $box.Text = [string]$c
+    $DayBoxes[$dk] = $box
+
+    $card = New-Object System.Windows.Controls.Border
+    $card.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#262E3E')
+    $card.CornerRadius = [System.Windows.CornerRadius]::new(9)
+    $card.Padding = [System.Windows.Thickness]::new(12, 8, 12, 8)
+    $card.Margin = [System.Windows.Thickness]::new(0, 0, 0, 6)
+    $grid = New-Object System.Windows.Controls.Grid
+    [void]$grid.Children.Add($lbl)
+    [void]$grid.Children.Add($box)
+    $card.Child = $grid
+    $DayRows.Children.Add($card) | Out-Null
+}
+
+# ---- 数据填充 / 无数据降级 ----
+function Update-Cards {
+    $t = 0
+    if ($days.ContainsKey($todayKey)) { $t = $days[$todayKey] }
+    $TodayCard.Text = [string]$t
+    $WeekCard.Text  = [string](Get-WeekCount $days $now)
+    $total = 0
+    if ($haveData) { try { $total = [int]$j.total } catch { } }
+    $TotalCard.Text = [string]$total
+}
+
+if ($haveData) {
+    Update-Cards
+    $TotalBox.Text = [string]([int]$j.total)
+}
+else {
+    $HintText.Text = $state.Reason + '。请先运行统计插件（pomodoro_stats_launcher）生成数据。'
+    $HintText.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#FF6B6B')
+    foreach ($b in $DayBoxes.Values) { $b.IsEnabled = $false }
+    $TotalBox.IsEnabled = $false
+    $SaveBtn.IsEnabled = $false
+}
+
+# ---- 事件 ----
+$TitleBar.Add_MouseLeftButtonDown({
+    try { $window.DragMove() } catch { }
+})
+
+$CloseBtn.Add_Click({ $window.Close() })
+$CancelBtn.Add_Click({ $window.Close() })
+
+$SaveBtn.Add_Click({
+    # 校验：全部为非负整数
+    $vals = @{}
+    $bad = $false
+    $normalBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#39435A')
+    $badBrush    = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#FF6B6B')
+    foreach ($e in $DayBoxes.GetEnumerator()) {
+        $t = $e.Value.Text.Trim()
+        if ($t -match '^\d+$') { $vals[$e.Key] = [int]$t; $e.Value.BorderBrush = $normalBrush }
+        else { $e.Value.BorderBrush = $badBrush; $bad = $true }
+    }
+    $t2 = $TotalBox.Text.Trim()
+    if ($t2 -match '^\d+$') { $TotalBox.BorderBrush = $normalBrush }
+    else { $TotalBox.BorderBrush = $badBrush; $bad = $true }
+
+    if ($bad) {
+        $StatusText.Text = '有非法输入（需为非负整数），未保存。'
+        $StatusText.Foreground = $badBrush
+        return
+    }
+
+    try {
+        # 合并：仅替换近 7 天 + total，其余历史日期原样保留
+        $newDays = [hashtable]$days.Clone()
+        foreach ($e in $vals.GetEnumerator()) { $newDays[$e.Key] = $e.Value }
+        $newTotal = [int]$t2
+        Save-State $j $newDays $newTotal
+        $script:days = $newDays
+        try { $script:j.total = $newTotal } catch { }
+
+        # 保存成功 → output.txt 提示手动重启统计插件
+        Write-OutputText 'Saved. Restart Stats.  <catime></catime>'
+        Update-Cards
+        $TotalCard.Text = [string]$newTotal
+        $StatusText.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#6EE7A0')
+        $StatusText.Text = '已保存。请手动重新运行统计插件（pomodoro_stats_launcher）使修改生效。'
+    }
+    catch {
+        $StatusText.Text = '保存失败：' + $_.Exception.Message
+        $StatusText.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#FF6B6B')
+    }
+})
+
+[void]$window.ShowDialog()

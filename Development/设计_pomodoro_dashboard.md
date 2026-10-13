@@ -187,7 +187,19 @@ V2 实现时按此结论执行，不再重新评估（除非用户明确放宽�
   相似度 apple 中高（圆果+蒂）、cherry 中（双果需取舍）
 - 候选 SVG 与对比预览在 `_tmp/icons/`（preview_extended.html）
 
-### 顶部卡片番茄图标（用户已定方案，等素材）
+### 顶部卡片番茄图标（v1.4 已实现：TDesign tomato）
+- 已采用 **TDesign tomato**（MIT，24×24 线性描边）：SVG path 直转 XAML
+  `PathGeometry` 资源（TomatoBody/TomatoStem），四卡片数字后 15px 图标，
+  色 #D94848，零依赖。License 备案：MIT，Tencent/tdesign-icons。
+- WPF 注意：`Path` 无 SVG 的 `StrokeLineCap` 属性，用
+  `StrokeStartLineCap`/`StrokeEndLineCap` 替代。
+
+### 已实现注意点（v1.4，后续 V3 折线图必须遵守）
+- **派生视图必须在保存后刷新**：用户实测“保存校准后热力图不更新”已修
+  （Update-Heatmap 重建）。V3 趋势折线图接入时，保存流程中必须同步调用
+  折线视图的更新函数，不得只在启动时构建一次。
+- 热力图为**相对色阶**：基准 = 当前 12 周窗口内最大值（透明度 0.25~0.75
+  线性映射），避免历史单日极值压淡近期数据；如需绝对色阶再议。
 - **内容**：顶部四张卡片（今日/本周/本月/累计）的数字后面加番茄图标作为单位，
   替换默认 emoji 或纯文本
 - **图标来源**：用户自行寻找开源可商用 SVG（候选：Tabler Icons、Lucide、

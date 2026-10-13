@@ -349,7 +349,17 @@ function Load-State {
             if ($j.lastEvent) { $state.lastEvent = [datetime]$j.lastEvent }
             $d = @{}
             foreach ($p in $j.days.PSObject.Properties) {
-                if ($p.Name -match '^\d{4}-\d{2}-\d{2}$') { $d[$p.Name] = [int]$p.Value }
+                # 既要格式合法，也要日历合法：2026-02-30 这类"格式对、日期错"的脏键
+                # 若放进来，会让后续的 Get-WeekCount/Get-MonthCount 每次刷新都 ParseExact 抛异常，
+                # 因此在此直接丢弃（同时要求值为可转 int 的正整数）。
+                if ($p.Name -match '^\d{4}-\d{2}-\d{2}$') {
+                    try {
+                        [datetime]::ParseExact($p.Name, 'yyyy-MM-dd', $null) | Out-Null
+                        [int]$v = $p.Value
+                        if ($v -ge 0) { $d[$p.Name] = $v }
+                    }
+                    catch { }
+                }
             }
             $state.days = $d
         }
@@ -361,11 +371,18 @@ function Load-State {
 function Save-State {
     param($State)
     try {
-        # 清理 400 天以前的明细，保持状态文件精简
+        # 清理 400 天以前的明细，保持状态文件精简。
+        # 个别被手动改坏的日期键（如 2026-02-30，格式合法但日历不合法）
+        # 会让 ParseExact 抛异常；此处逐键容错，单个坏键跳过即可，
+        # 避免"一颗坏键导致整次 Save 中断、计数永久写不进磁盘"。
         $cutoff = (Get-Date).Date.AddDays(-400)
-        $stale = @($State.days.Keys | Where-Object {
-            [datetime]::ParseExact($_, 'yyyy-MM-dd', $null) -lt $cutoff
-        })
+        $stale = @()
+        foreach ($k in $State.days.Keys) {
+            try {
+                if ([datetime]::ParseExact($k, 'yyyy-MM-dd', $null) -lt $cutoff) { $stale += $k }
+            }
+            catch { }
+        }
         foreach ($k in $stale) { $State.days.Remove($k) | Out-Null }
 
         $obj = [ordered]@{

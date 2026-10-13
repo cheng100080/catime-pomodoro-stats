@@ -11,6 +11,9 @@
             version/phase/lastEvent 原样保留（phase 动了会打乱统计插件索引）
     保存成功后提示用户手动重新运行统计插件使修改生效（v1 无自动拉起）。
 
+    运行期间 output.txt 只写 <catime></catime> 标签（时钟照常显示），
+    不再写入 "Dashboard" 等英文提示（用户反馈：时钟字号过大、编辑模式溢出）。
+
     依赖：Windows 自带 PowerShell 5.1 + .NET Framework WPF，无第三方组件。
     注意：必须以 -STA 启动（launcher 已加）；Catime 同时只跑一个插件，
           从菜单启动本面板会自动停掉统计插件，天然避免写冲突。
@@ -138,7 +141,7 @@ if ($SelfTest) {
     exit 0
 }
 
-# ---------------- WPF 面板 ----------------
+# ---------------- WPF 面板（浅色卡片风，固定配色） ----------------
 
 Add-Type -AssemblyName PresentationFramework
 
@@ -152,15 +155,15 @@ $todayKey = $now.ToString('yyyy-MM-dd')
 
 $weekCn = @('周日','周一','周二','周三','周四','周五','周六')
 
-# 面板存活期间 Catime 窗口显示 Dashboard（必须带标签，缺了会被杀）
-if ($haveData) { Write-OutputText 'Dashboard  <catime></catime>' }
-else           { Write-OutputText 'No Stats Data  <catime></catime>' }
+# 运行期间时钟只保留标签：不再向时钟写 "Dashboard" 等英文
+# （用户反馈：时钟字号渲染过大、编辑模式下时钟组件增高溢出屏幕）
+Write-OutputText '<catime></catime>'
 
-# XAML：固定深色主题 + 固定强调渐变（#89F7FE→#66A6FF），不读 config.ini
+# XAML：浅色卡片风（暖白底 + 白卡片 + 细边框），固定配色，宽 560 近正方形
 $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Pomodoro Dashboard" Width="480" SizeToContent="Height"
+        Title="Pomodoro Dashboard" Width="560" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" WindowStyle="None"
         AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" FontFamily="Microsoft YaHei UI" TextOptions.TextFormattingMode="Display">
@@ -170,34 +173,40 @@ $xaml = @'
       <GradientStop Color="#66A6FF" Offset="1"/>
     </LinearGradientBrush>
     <Style x:Key="NumBox" TargetType="TextBox">
-      <Setter Property="Width" Value="76"/>
-      <Setter Property="Height" Value="30"/>
-      <Setter Property="Background" Value="#262E3E"/>
-      <Setter Property="Foreground" Value="#E8ECF4"/>
-      <Setter Property="BorderBrush" Value="#39435A"/>
+      <Setter Property="Width" Value="72"/>
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="Background" Value="#FFFFFF"/>
+      <Setter Property="Foreground" Value="#2F2F2C"/>
+      <Setter Property="BorderBrush" Value="#E3DFD6"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="HorizontalAlignment" Value="Right"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
-      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="FontSize" Value="13"/>
       <Setter Property="Padding" Value="4,0"/>
     </Style>
     <Style x:Key="DayLabel" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="#B7C0D4"/>
-      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#55524B"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="#FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#ECE8E0"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="10"/>
+    </Style>
     <Style x:Key="PrimaryBtn" TargetType="Button">
-      <Setter Property="Background" Value="{StaticResource Accent}"/>
-      <Setter Property="Foreground" Value="#10203A"/>
+      <Setter Property="Background" Value="#2F2F2C"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
       <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="FontSize" Value="14"/>
-      <Setter Property="Height" Value="38"/>
-      <Setter Property="Width" Value="200"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="Width" Value="150"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border CornerRadius="9" Background="{TemplateBinding Background}">
+            <Border CornerRadius="8" Background="{TemplateBinding Background}">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
           </ControlTemplate>
@@ -205,16 +214,17 @@ $xaml = @'
       </Setter>
     </Style>
     <Style x:Key="GhostBtn" TargetType="Button">
-      <Setter Property="Background" Value="#262E3E"/>
-      <Setter Property="Foreground" Value="#B7C0D4"/>
-      <Setter Property="FontSize" Value="14"/>
-      <Setter Property="Height" Value="38"/>
-      <Setter Property="Width" Value="110"/>
+      <Setter Property="Background" Value="#FFFFFF"/>
+      <Setter Property="Foreground" Value="#55524B"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="Width" Value="90"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border CornerRadius="9" Background="{TemplateBinding Background}">
+            <Border CornerRadius="8" Background="{TemplateBinding Background}"
+                    BorderBrush="#E3DFD6" BorderThickness="1">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
           </ControlTemplate>
@@ -222,71 +232,79 @@ $xaml = @'
       </Setter>
     </Style>
   </Window.Resources>
-  <Border CornerRadius="12" Background="#1E2430" BorderBrush="#2A3242" BorderThickness="1">
-    <StackPanel Margin="24,0,24,20">
+  <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1">
+    <StackPanel Margin="22,0,22,14">
       <!-- 标题栏（可拖动） -->
-      <Border x:Name="TitleBar" Background="{StaticResource Accent}" CornerRadius="12,12,0,0"
-              Margin="-24,0,-24,16" Padding="24,10">
+      <Border x:Name="TitleBar" Background="Transparent" Margin="-22,0,-22,12" Padding="22,12">
         <Grid>
-          <TextBlock Text="Pomodoro Dashboard" FontSize="15" FontWeight="Bold"
-                     Foreground="#10203A" VerticalAlignment="Center"/>
+          <StackPanel>
+            <TextBlock Text="Pomodoro Dashboard" FontSize="15" FontWeight="Bold"
+                       Foreground="#2F2F2C"/>
+            <Rectangle Height="3" Width="46" RadiusX="1.5" RadiusY="1.5"
+                       Fill="{StaticResource Accent}" HorizontalAlignment="Left" Margin="0,5,0,0"/>
+          </StackPanel>
           <Button x:Name="CloseBtn" Content="&#10005;" Width="28" Height="28"
-                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                  Background="Transparent" BorderThickness="0" Foreground="#10203A"
-                  FontSize="12" Cursor="Hand" ContentStringFormat="{}{0}"/>
+                  HorizontalAlignment="Right" VerticalAlignment="Top"
+                  Background="Transparent" BorderThickness="0" Foreground="#9A968C"
+                  FontSize="12" Cursor="Hand"/>
         </Grid>
       </Border>
       <!-- 概览卡片 -->
       <UniformGrid Columns="3">
-        <Border Background="#262E3E" CornerRadius="9" Margin="0,0,6,0" Padding="0,12">
+        <Border Style="{StaticResource Card}" Margin="0,0,6,0" Padding="0,10">
           <StackPanel>
-            <TextBlock Text="今日" Foreground="#8A93A6" FontSize="12"
+            <TextBlock Text="今日" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="TodayCard" Text="0" Foreground="#E8ECF4" FontSize="26"
-                       FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TodayCard" Text="0" Foreground="#2F2F2C" FontSize="22"
+                       FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
           </StackPanel>
         </Border>
-        <Border Background="#262E3E" CornerRadius="9" Margin="6,0,6,0" Padding="0,12">
+        <Border Style="{StaticResource Card}" Margin="6,0,6,0" Padding="0,10">
           <StackPanel>
-            <TextBlock Text="本周" Foreground="#8A93A6" FontSize="12"
+            <TextBlock Text="本周" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="WeekCard" Text="0" Foreground="#89F7FE" FontSize="26"
-                       FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="WeekCard" Text="0" Foreground="#4A90D9" FontSize="22"
+                       FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
           </StackPanel>
         </Border>
-        <Border Background="#262E3E" CornerRadius="9" Margin="6,0,0,0" Padding="0,12">
+        <Border Style="{StaticResource Card}" Margin="6,0,0,0" Padding="0,10">
           <StackPanel>
-            <TextBlock Text="累计" Foreground="#8A93A6" FontSize="12"
+            <TextBlock Text="累计" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="TotalCard" Text="0" Foreground="#E8ECF4" FontSize="26"
-                       FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TotalCard" Text="0" Foreground="#2F2F2C" FontSize="22"
+                       FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
           </StackPanel>
         </Border>
       </UniformGrid>
       <!-- 提示 -->
-      <TextBlock x:Name="HintText" Foreground="#8A93A6" FontSize="11" Margin="2,12,0,4"
-                 TextWrapping="Wrap" Text="校准前请先停止统计插件（从 Catime 菜单启动本面板会自动停止）。仅编辑近 7 天与累计；“本周”由每日数据自动计算。"/>
+      <TextBlock x:Name="HintText" Foreground="#9A968C" FontSize="11" Margin="2,10,0,2"
+                 TextWrapping="Wrap"
+                 Text="校准前请先停止统计插件（从 Catime 菜单启动本面板会自动停止）。"/>
       <!-- 近 7 天 -->
-      <TextBlock Text="近 7 天（可编辑）" Foreground="#E8ECF4" FontSize="13"
+      <TextBlock Text="近 7 天" Foreground="#2F2F2C" FontSize="13"
                  FontWeight="Bold" Margin="2,4,0,6"/>
       <StackPanel x:Name="DayRows"/>
-      <!-- 累计编辑 -->
-      <TextBlock Text="累计（可编辑）" Foreground="#E8ECF4" FontSize="13"
-                 FontWeight="Bold" Margin="2,10,0,6"/>
-      <Border Background="#262E3E" CornerRadius="9" Padding="12,8" Margin="0,0,0,14">
+      <!-- 累计 -->
+      <TextBlock Text="累计" Foreground="#2F2F2C" FontSize="13"
+                 FontWeight="Bold" Margin="2,8,0,6"/>
+      <Border Style="{StaticResource Card}" Padding="12,7" Margin="0,0,0,12">
         <Grid>
           <TextBlock Text="累计完成" Style="{StaticResource DayLabel}"/>
           <TextBox x:Name="TotalBox" Style="{StaticResource NumBox}"/>
         </Grid>
       </Border>
-      <!-- 按钮 -->
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+      <!-- 按钮：默认隐藏，编辑任意数字后出现 -->
+      <StackPanel x:Name="BtnRow" Orientation="Horizontal" HorizontalAlignment="Center"
+                  Visibility="Collapsed">
         <Button x:Name="SaveBtn" Content="保存" Style="{StaticResource PrimaryBtn}" Margin="0,0,10,0"/>
         <Button x:Name="CancelBtn" Content="取消" Style="{StaticResource GhostBtn}"/>
       </StackPanel>
       <!-- 状态栏 -->
-      <TextBlock x:Name="StatusText" Foreground="#8A93A6" FontSize="12" Margin="2,12,0,0"
+      <TextBlock x:Name="StatusText" Foreground="#9A968C" FontSize="12" Margin="2,8,0,0"
                  TextWrapping="Wrap" Text=""/>
+      <!-- 底部统一提示 -->
+      <TextBlock Text="单击数字可人工校准数量" Foreground="#B3AEA4" FontSize="11"
+                 HorizontalAlignment="Center" Margin="0,10,0,0"/>
     </StackPanel>
   </Border>
 </Window>
@@ -302,9 +320,13 @@ $TotalCard = $window.FindName('TotalCard')
 $HintText  = $window.FindName('HintText')
 $DayRows   = $window.FindName('DayRows')
 $TotalBox  = $window.FindName('TotalBox')
+$BtnRow    = $window.FindName('BtnRow')
 $SaveBtn   = $window.FindName('SaveBtn')
 $CancelBtn = $window.FindName('CancelBtn')
 $StatusText = $window.FindName('StatusText')
+
+$conv = [System.Windows.Media.BrushConverter]::new()
+$script:SuppressEditEvent = $true   # 初始填充不触发"已编辑"显隐
 
 # ---- 生成 7 天编辑行（今天在最上） ----
 $DayBoxes = @{}   # 日期键 -> TextBox
@@ -326,10 +348,9 @@ for ($i = 0; $i -lt 7; $i++) {
     $DayBoxes[$dk] = $box
 
     $card = New-Object System.Windows.Controls.Border
-    $card.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#262E3E')
-    $card.CornerRadius = [System.Windows.CornerRadius]::new(9)
-    $card.Padding = [System.Windows.Thickness]::new(12, 8, 12, 8)
-    $card.Margin = [System.Windows.Thickness]::new(0, 0, 0, 6)
+    $card.Style = $window.Resources['Card']
+    $card.Padding = [System.Windows.Thickness]::new(12, 6, 12, 6)
+    $card.Margin = [System.Windows.Thickness]::new(0, 0, 0, 5)
     $grid = New-Object System.Windows.Controls.Grid
     [void]$grid.Children.Add($lbl)
     [void]$grid.Children.Add($box)
@@ -348,17 +369,35 @@ function Update-Cards {
     $TotalCard.Text = [string]$total
 }
 
+function Get-Snapshot {
+    # 当前界面值的快照（供"取消"还原）
+    $snap = @{}
+    foreach ($e in $DayBoxes.GetEnumerator()) { $snap[$e.Key] = $e.Value.Text }
+    $snap['__total__'] = $TotalBox.Text
+    return $snap
+}
+
+function Apply-Snapshot($snap) {
+    $script:SuppressEditEvent = $true
+    foreach ($e in $DayBoxes.GetEnumerator()) {
+        if ($snap.ContainsKey($e.Key)) { $e.Value.Text = $snap[$e.Key] }
+    }
+    if ($snap.ContainsKey('__total__')) { $TotalBox.Text = $snap['__total__'] }
+    $script:SuppressEditEvent = $false
+}
+
 if ($haveData) {
     Update-Cards
     $TotalBox.Text = [string]([int]$j.total)
 }
 else {
     $HintText.Text = $state.Reason + '。请先运行统计插件（pomodoro_stats_launcher）生成数据。'
-    $HintText.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#FF6B6B')
+    $HintText.Foreground = $conv.ConvertFromString('#D9534F')
     foreach ($b in $DayBoxes.Values) { $b.IsEnabled = $false }
     $TotalBox.IsEnabled = $false
-    $SaveBtn.IsEnabled = $false
 }
+$script:Snapshot = Get-Snapshot
+$script:SuppressEditEvent = $false
 
 # ---- 事件 ----
 $TitleBar.Add_MouseLeftButtonDown({
@@ -366,14 +405,30 @@ $TitleBar.Add_MouseLeftButtonDown({
 })
 
 $CloseBtn.Add_Click({ $window.Close() })
-$CancelBtn.Add_Click({ $window.Close() })
+
+# 编辑任意数字后按钮才出现
+foreach ($b in $DayBoxes.Values) {
+    $b.Add_TextChanged({
+        if (-not $script:SuppressEditEvent) { $BtnRow.Visibility = 'Visible' }
+    })
+}
+$TotalBox.Add_TextChanged({
+    if (-not $script:SuppressEditEvent) { $BtnRow.Visibility = 'Visible' }
+})
+
+# 取消：还原到最近一次保存的值，按钮收起
+$CancelBtn.Add_Click({
+    Apply-Snapshot $script:Snapshot
+    $BtnRow.Visibility = 'Collapsed'
+    $StatusText.Text = ''
+})
 
 $SaveBtn.Add_Click({
     # 校验：全部为非负整数
     $vals = @{}
     $bad = $false
-    $normalBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#39435A')
-    $badBrush    = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#FF6B6B')
+    $normalBrush = $conv.ConvertFromString('#E3DFD6')
+    $badBrush    = $conv.ConvertFromString('#D9534F')
     foreach ($e in $DayBoxes.GetEnumerator()) {
         $t = $e.Value.Text.Trim()
         if ($t -match '^\d+$') { $vals[$e.Key] = [int]$t; $e.Value.BorderBrush = $normalBrush }
@@ -398,16 +453,16 @@ $SaveBtn.Add_Click({
         $script:days = $newDays
         try { $script:j.total = $newTotal } catch { }
 
-        # 保存成功 → output.txt 提示手动重启统计插件
-        Write-OutputText 'Saved. Restart Stats.  <catime></catime>'
         Update-Cards
         $TotalCard.Text = [string]$newTotal
-        $StatusText.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#6EE7A0')
+        $script:Snapshot = Get-Snapshot
+        $BtnRow.Visibility = 'Collapsed'
+        $StatusText.Foreground = $conv.ConvertFromString('#2E9E63')
         $StatusText.Text = '已保存。请手动重新运行统计插件（pomodoro_stats_launcher）使修改生效。'
     }
     catch {
         $StatusText.Text = '保存失败：' + $_.Exception.Message
-        $StatusText.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#FF6B6B')
+        $StatusText.Foreground = $conv.ConvertFromString('#D9534F')
     }
 })
 

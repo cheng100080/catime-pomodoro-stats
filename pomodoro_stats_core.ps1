@@ -524,12 +524,17 @@ function Refresh-Display {
         # 优先用图片渲染统计行（可任意小、行距可贴近）；失败则回退到 markdown 标题分级
         $img = Update-StatsImage $line $cfg
         $zwsp = [string][char]0x200B   # 零宽空格：不可见，但能让"图片行"成为独立一行
-        # 注意：<catime> 必须放在 <md> 之外 —— 实测放在 markdown 内不会渲染！
+        # 计时行：Catime 只在自己计时时才给 <catime> 内容，空闲时是空的（实测），
+        # 所以空闲时由插件自己写当前时间；标签始终保留（缺了会被 Catime 杀掉）。
+        $timerRunning = ($script:TimerEndsAt -ne $null) -and ((Get-Date) -lt $script:TimerEndsAt)
+        $timeText = ''
+        if (-not $timerRunning) { $timeText = (Get-Date).ToString('HH:mm') }
+        $timerLine = $timeText + '<catime></catime>'
         if ($img) {
-            Write-Display ("<md>![{0}]({1}){2}</md>`n<catime></catime>" -f $img, $script:StatsImgName, $zwsp)
+            Write-Display ("<md>![{0}]({1}){2}</md>`n{3}" -f $img, $script:StatsImgName, $zwsp, $timerLine)
         }
         else {
-            Write-Display ("<md>###### {0}{1}</md>`n<catime></catime>" -f $line, $zwsp)
+            Write-Display ("<md>###### {0}{1}</md>`n{2}" -f $line, $zwsp, $timerLine)
         }
     }
     else {
@@ -618,6 +623,7 @@ $loggedErr  = @{}
 $script:TimerEndsAt = $null   # 推断的"当前这段计时结束时刻"（$TimerDisplayMode='timer' 用）
 $script:CyclesDone  = 0       # 本次运行中已跑完的循环数
 $timerOnlyShown     = $false  # 当前是否处于"只显示计时"状态
+$lastTick           = ''      # 上次刷新到的秒（空闲时每秒刷新当前时间）
 $lastWinSig         = 0       # 上次看到的 Catime 窗口尺寸（用于窗口贴角）
 
 # 插件模式窗口定位模式
@@ -692,6 +698,15 @@ while ($true) {
             }
             elseif ($h -eq [IntPtr]::Zero) {
                 $lastToast = [IntPtr]::Zero
+            }
+
+            # 空闲时每秒刷新一次，让插件写的当前时间跟着走（图片有缓存，开销很小）
+            $secNow = (Get-Date).ToString('HH:mm:ss')
+            if ($secNow -ne $lastTick) {
+                $lastTick = $secNow
+                if (-not (($script:TimerEndsAt -ne $null) -and ((Get-Date) -lt $script:TimerEndsAt))) {
+                    Refresh-Display $state
+                }
             }
 
             # $TimerDisplayMode='timer'：推断的计时窗口开/关时切换显示

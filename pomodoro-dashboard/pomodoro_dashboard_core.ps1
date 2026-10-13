@@ -182,9 +182,11 @@ $xaml = @'
       <GradientStop Color="#89F7FE" Offset="0"/>
       <GradientStop Color="#66A6FF" Offset="1"/>
     </LinearGradientBrush>
-    <!-- 番茄图标：TDesign tomato（MIT，24x24 线性描边，SVG path 直转 XAML，零依赖） -->
+    <!-- 番茄图标：TDesign tomato（MIT，24x24 线性描边，SVG path 直转 XAML，零依赖）
+         果身红 / 蒂叶绿 / 外轮廓红（原 SVG 的 stem path 拆为蒂叶+外轮廓两段分别着色） -->
     <PathGeometry x:Key="TomatoBody" Figures="M12 5.514s2.556-.763 4-.338c2.817.828 4.998 2.822 5 7.324s-3.982 9.248-7.557 8.4c-.902-.214-.867-.299-1.443-.299s-.541.085-1.443.3C7 21.743 3 16.996 3 12.5S5.113 6 8 5.175c1.447-.414 4 .338 4 .338"/>
-    <PathGeometry x:Key="TomatoStem" Figures="M9.5 3L12 5.513L14.69 3m.959 2.687l-.352.512c-1.589 2.314-5.005 2.314-6.594 0l-.352-.512M12 5.514s-2.553-.752-4-.338C5.113 6 3 8.004 3 12.5s4 9.244 7.557 8.4c.902-.214.867-.299 1.443-.299s.541.085 1.443.3c3.575.847 7.56-3.899 7.557-8.4c-.002-4.503-2.183-6.497-5-7.325c-1.444-.425-4 .338-4 .338Z"/>
+    <PathGeometry x:Key="TomatoLeaf" Figures="M9.5 3L12 5.513L14.69 3m.959 2.687l-.352.512c-1.589 2.314-5.005 2.314-6.594 0l-.352-.512"/>
+    <PathGeometry x:Key="TomatoOutline" Figures="M12 5.514s-2.553-.752-4-.338C5.113 6 3 8.004 3 12.5s4 9.244 7.557 8.4c.902-.214.867-.299 1.443-.299s.541.085 1.443.3c3.575.847 7.56-3.899 7.557-8.4c-.002-4.503-2.183-6.497-5-7.325c-1.444-.425-4 .338-4 .338Z"/>
     <Style x:Key="NumBox" TargetType="TextBox">
       <Setter Property="Width" Value="68"/>
       <Setter Property="Height" Value="26"/>
@@ -307,7 +309,10 @@ $xaml = @'
                 <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
                 <Path Stroke="#D94848" StrokeThickness="2"
                       StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoStem}"/>
+                      Stretch="Uniform" Data="{StaticResource TomatoOutline}"/>
+                <Path Stroke="#5FA85B" StrokeThickness="2"
+                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                      Stretch="Uniform" Data="{StaticResource TomatoLeaf}"/>
               </Grid>
             </StackPanel>
           </StackPanel>
@@ -323,7 +328,10 @@ $xaml = @'
                 <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
                 <Path Stroke="#D94848" StrokeThickness="2"
                       StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoStem}"/>
+                      Stretch="Uniform" Data="{StaticResource TomatoOutline}"/>
+                <Path Stroke="#5FA85B" StrokeThickness="2"
+                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                      Stretch="Uniform" Data="{StaticResource TomatoLeaf}"/>
               </Grid>
             </StackPanel>
           </StackPanel>
@@ -339,7 +347,10 @@ $xaml = @'
                 <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
                 <Path Stroke="#D94848" StrokeThickness="2"
                       StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoStem}"/>
+                      Stretch="Uniform" Data="{StaticResource TomatoOutline}"/>
+                <Path Stroke="#5FA85B" StrokeThickness="2"
+                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                      Stretch="Uniform" Data="{StaticResource TomatoLeaf}"/>
               </Grid>
             </StackPanel>
           </StackPanel>
@@ -355,7 +366,10 @@ $xaml = @'
                 <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
                 <Path Stroke="#D94848" StrokeThickness="2"
                       StrokeStartLineCap="Square" StrokeEndLineCap="Square"
-                      Stretch="Uniform" Data="{StaticResource TomatoStem}"/>
+                      Stretch="Uniform" Data="{StaticResource TomatoOutline}"/>
+                <Path Stroke="#5FA85B" StrokeThickness="2"
+                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                      Stretch="Uniform" Data="{StaticResource TomatoLeaf}"/>
               </Grid>
             </StackPanel>
           </StackPanel>
@@ -399,6 +413,8 @@ $xaml = @'
                 </Rectangle.Fill>
               </Rectangle>
               <TextBlock Text="多" Foreground="#9A968C" FontSize="11" VerticalAlignment="Center"/>
+              <TextBlock x:Name="HeatLegendNote" Text="" Foreground="#B3AEA4" FontSize="11"
+                         VerticalAlignment="Center" Margin="10,0,0,0"/>
             </StackPanel>
             <TextBlock Text="格子颜色越深表示当日完成越多；悬停可查看具体数值" Foreground="#B3AEA4"
                        FontSize="11" HorizontalAlignment="Center" Margin="0,10,0,0"/>
@@ -563,6 +579,7 @@ $SaveBtn.Add_Click({
 
 # ---- 热力图（V2：近 12 周打卡图，行=周一..周日，列=周，颜色深浅映射当日完成数） ----
 $HeatGrid = $window.FindName('HeatGrid')
+$HeatLegendNote = $window.FindName('HeatLegendNote')
 
 function Build-Heatmap {
     param($Days, [datetime]$Now)
@@ -597,6 +614,7 @@ function Build-Heatmap {
             if ($Days.ContainsKey($dk) -and $Days[$dk] -gt $max) { $max = $Days[$dk] }
         }
     }
+    $script:HeatMax = $max
 
     $convH    = [System.Windows.Media.BrushConverter]::new()
     $accent   = $convH.ConvertFromString('#66A6FF')
@@ -673,6 +691,8 @@ function Update-Heatmap {
     # 重建热力图（保存校准后必须调用，否则格子还是旧数据）
     $HeatGrid.Children.Clear()
     [void]$HeatGrid.Children.Add((Build-Heatmap $days $now))
+    # 相对色阶的绝对上下文：图例标注当前窗口峰值
+    $HeatLegendNote.Text = ('最深 = 当日 {0} 个' -f $script:HeatMax)
 }
 
 if ($haveData) { Update-Heatmap }

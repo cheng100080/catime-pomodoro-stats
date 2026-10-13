@@ -109,3 +109,7 @@ OS 类型走 `Shell_NotifyIcon` 气球、由 Explorer 渲染。实测：连续�
   结果必须落盘，且日志要实时追加写。
 - 插件首次启动到写出 `output.txt` 约需 **6 秒**（`Add-Type` 编译 C#），
   测试等待窗口要留足。
+
+## 2026-10-13 追记
+- 插件入口已由 `pomodoro_stats.bat` 更名为 `pomodoro_stats_launcher.bat`（番茄统计_启动按钮），
+  核心脚本 `pomodoro_stats_core.ps1`（番茄统计_核心）不变。上文历史记录中的旧文件名以本备注为准。

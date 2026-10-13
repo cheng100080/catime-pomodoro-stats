@@ -171,12 +171,12 @@ $AnchorMarginY = 0
 
    | 文件 | 作用 |
    |---|---|
-   | **`pomodoro_stats.bat`** | **启动入口 —— 在 Catime 菜单里点这个** |
+   | **`pomodoro_stats_launcher.bat`** | **启动入口 —— 在 Catime 菜单里点这个** |
    | `pomodoro_stats_core.ps1` | 真正的统计逻辑（不要点它） |
 
    （也可以托盘右键 → `插件` → `打开插件文件夹` 打开该目录）
 
-2. 托盘图标右键 → `插件` → 点击 **`pomodoro_stats.bat`** → 首次运行选 **「信任并运行」**。
+2. 托盘图标右键 → `插件` → 点击 **`pomodoro_stats_launcher.bat`** → 首次运行选 **「信任并运行」**。
 
 3. 窗口即显示统计数字。脚本顶部的 `$LabelToday / $LabelWeek / $LabelTotal` 可改显示标签。
 
@@ -269,7 +269,7 @@ Catime 启动 `.ps1` 插件时执行的是 `powershell.exe -NoProfile ... -File 
 ## 手动验证（约 1 分钟）
 
 1. 确认通知类型为 `CATIME`（见上文前置条件）。
-2. 托盘图标**右键** → **`插件`** → 点击 **`pomodoro_stats.bat`** → 弹窗里选 **「信任并运行」**
+2. 托盘图标**右键** → **`插件`** → 点击 **`pomodoro_stats_launcher.bat`** → 弹窗里选 **「信任并运行」**
    （菜单里还会有一个 `pomodoro_stats_core.ps1`，那是逻辑文件，**不要点它**）。
    窗口应显示 `T0 W0 A0`（或已有数据）。
 3. 快速触发一次"阶段完成"：**左键**单击托盘图标 → 在「倒计时」输入框输入 **`10s`** 回车
@@ -281,10 +281,10 @@ Catime 启动 `.ps1` 插件时执行的是 `powershell.exe -NoProfile ... -File 
 
 | 现象 | 原因 / 处理 |
 |---|---|
-| 窗口显示 `powershell.exe not found` | 误点了 `pomodoro_stats_core.ps1`。点 `pomodoro_stats.bat` 那个入口 |
-| 一开始倒计时插件就没了、显示变空白 | 旧版本问题，已修复（输出末尾带 `<catime>` 标签）；重新点一次 `pomodoro_stats.bat` 即可 |
+| 窗口显示 `powershell.exe not found` | 误点了 `pomodoro_stats_core.ps1`。点 `pomodoro_stats_launcher.bat` 那个入口 |
+| 一开始倒计时插件就没了、显示变空白 | 旧版本问题，已修复（输出末尾带 `<catime>` 标签）；重新点一次 `pomodoro_stats_launcher.bat` 即可 |
 | 窗口显示 `SET CATIME` | 通知类型不是 `CATIME`（见上文前置条件）；改完保存即生效 |
-| 通知弹出了但数字不动 | 插件没在运行：托盘右键 → `插件`，确认 `pomodoro_stats.bat` 前有 ✓ |
+| 通知弹出了但数字不动 | 插件没在运行：托盘右键 → `插件`，确认 `pomodoro_stats_launcher.bat` 前有 ✓ |
 | 菜单里列出两个 `pomodoro_stats*` | 正常，`.bat` 是入口，`..._core.ps1` 是逻辑文件 |
 | 想清零统计 | 删除插件目录下的 `pomodoro_stats.json` |
 | 想查原因 | 看同目录的 `pomodoro_stats.log`（启动参数、计数、异常） |

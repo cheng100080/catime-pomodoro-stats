@@ -112,7 +112,7 @@
 
 | 路径 | 内容 | 性质 |
 |---|---|---|
-| `%LOCALAPPDATA%\Catime\resources\plugins\pomodoro_stats.bat` | 插件入口 | 必须放 C 盘（Catime 约定位置） |
+| `%LOCALAPPDATA%\Catime\resources\plugins\pomodoro_stats_launcher.bat` | 插件入口 | 必须放 C 盘（Catime 约定位置） |
 | `%LOCALAPPDATA%\Catime\resources\plugins\pomodoro_stats_core.ps1` | 插件逻辑 | 同上 |
 | 同目录 `output.txt` / `pomodoro_stats.json` / `pomodoro_stats.log` | 运行期产物（显示内容/统计/日志） | 可随时删除 |
 | `%TEMP%\catime_dbg*.log`、`%TEMP%\path_dump.txt` | 诊断过程产生的临时文件 | 可清理 |

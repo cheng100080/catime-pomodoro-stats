@@ -64,12 +64,11 @@ $AnchorMarginY = 0
 $DisplayLayout = 'stacked'
 
 # 空闲（没在计时）时是否由插件写当前时间：
-#   $false（默认）= 交给 Catime 自己显示（你平时是开着 Catime"当前时间"的 ->
-#                    这样不会出现两个时间；但注意 Catime 在"开始计时"时会把当前时间
-#                    隐藏，那之后本插件这行也会跟着空掉）
-#   $true         = 插件自己写一份（保证任何时候都有时间显示，但若同时开着
-#                    Catime"当前时间"就会看到两个时间）
-$ShowOwnTimeWhenIdle = $false
+#   规则（$true 时的实际行为）：只在"本次运行中已经跑过一次计时"之后才自写时间 ——
+#     刚加载插件时：Catime 自己显示着当前时间（STARTUP_MODE=SHOW_TIME）-> 不重复写 ✓
+#     跑过一次计时后：Catime 会隐藏当前时间 -> 由插件补上，避免那一行变空 ✓
+#   $false = 永远不写（完全交给 Catime；计时后该行可能为空）
+$ShowOwnTimeWhenIdle = $true
 
 # 统计行是否渲染成图片：
 #   $false = 普通文字（受 Catime 字号档位限制：统计最小只能到计时的 60%）
@@ -536,7 +535,9 @@ function Refresh-Display {
         # 所以空闲时由插件自己写当前时间；标签始终保留（缺了会被 Catime 杀掉）。
         $timerRunning = ($script:TimerEndsAt -ne $null) -and ((Get-Date) -lt $script:TimerEndsAt)
         $timeText = ''
-        if (-not $timerRunning -and $ShowOwnTimeWhenIdle) { $timeText = (Get-Date).ToString('H:mm') }
+        if (-not $timerRunning -and $ShowOwnTimeWhenIdle -and $script:TimerSeen) {
+            $timeText = (Get-Date).ToString('H:mm')
+        }
         $timerLine = $timeText + '<catime></catime>'
         if ($img) {
             Write-Display ("<md>![{0}]({1}){2}</md>`n{3}" -f $img, $script:StatsImgName, $zwsp, $timerLine)
@@ -614,6 +615,8 @@ function Invoke-PhaseComplete {
         $script:TimerEndsAt = $now.AddSeconds($Pattern[($idx + 1) % $n])
     }
 
+    $script:TimerSeen = $true   # 已跑过一次计时：此后由插件补写当前时间（Catime 会隐藏它）
+
     Save-State $State
     if ($isCounted) { Refresh-Display $State }
 }
@@ -632,6 +635,7 @@ $script:TimerEndsAt = $null   # 推断的"当前这段计时结束时刻"（$Tim
 $script:CyclesDone  = 0       # 本次运行中已跑完的循环数
 $timerOnlyShown     = $false  # 当前是否处于"只显示计时"状态
 $lastTick           = ''      # 上次刷新到的秒（空闲时每秒刷新当前时间）
+$script:TimerSeen   = $false  # 本次运行中是否已经跑过计时
 $lastWinSig         = 0       # 上次看到的 Catime 窗口尺寸（用于窗口贴角）
 
 # 插件模式窗口定位模式

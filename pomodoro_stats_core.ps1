@@ -63,10 +63,13 @@ $AnchorMarginY = 0
 #   'single'  = 单行：统计 + 计时排在同一行
 $DisplayLayout = 'stacked'
 
-# 空闲（没在计时）时由插件写当前时间：
-#   $true  = 写（否则 Catime 在插件模式下空闲时不显示任何时间）
-#   注意：若你又点了 Catime 自带的"当前时间"，会出现两个时间 —— 那时把这里改成 $false
-$ShowOwnTimeWhenIdle = $true
+# 空闲（没在计时）时是否由插件写当前时间：
+#   $false（默认）= 交给 Catime 自己显示（你平时是开着 Catime"当前时间"的 ->
+#                    这样不会出现两个时间；但注意 Catime 在"开始计时"时会把当前时间
+#                    隐藏，那之后本插件这行也会跟着空掉）
+#   $true         = 插件自己写一份（保证任何时候都有时间显示，但若同时开着
+#                    Catime"当前时间"就会看到两个时间）
+$ShowOwnTimeWhenIdle = $false
 
 # 统计行是否渲染成图片：
 #   $false = 普通文字（受 Catime 字号档位限制：统计最小只能到计时的 60%）

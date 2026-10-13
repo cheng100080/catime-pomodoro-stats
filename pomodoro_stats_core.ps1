@@ -63,6 +63,11 @@ $AnchorMarginY = 0
 #   'single'  = 单行：统计 + 计时排在同一行
 $DisplayLayout = 'stacked'
 
+# 空闲（没在计时）时由插件写当前时间：
+#   $true  = 写（否则 Catime 在插件模式下空闲时不显示任何时间）
+#   注意：若你又点了 Catime 自带的"当前时间"，会出现两个时间 —— 那时把这里改成 $false
+$ShowOwnTimeWhenIdle = $true
+
 # 统计行是否渲染成图片：
 #   $false = 普通文字（受 Catime 字号档位限制：统计最小只能到计时的 60%）
 #   $true  = 由插件画成 PNG 贴在计时上方（可任意小、行距可压到很紧；
@@ -528,7 +533,7 @@ function Refresh-Display {
         # 所以空闲时由插件自己写当前时间；标签始终保留（缺了会被 Catime 杀掉）。
         $timerRunning = ($script:TimerEndsAt -ne $null) -and ((Get-Date) -lt $script:TimerEndsAt)
         $timeText = ''
-        if (-not $timerRunning) { $timeText = (Get-Date).ToString('HH:mm') }
+        if (-not $timerRunning -and $ShowOwnTimeWhenIdle) { $timeText = (Get-Date).ToString('H:mm') }
         $timerLine = $timeText + '<catime></catime>'
         if ($img) {
             Write-Display ("<md>![{0}]({1}){2}</md>`n{3}" -f $img, $script:StatsImgName, $zwsp, $timerLine)

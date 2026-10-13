@@ -1,16 +1,18 @@
 # 项目规则
 
-**本文件是规则唯一来源。** 详细说明见 `Development/Development.md`，
+**本文件是规则唯一来源。** 详细说明见 `Development/Development.md`，  
 错误排查记录 `Development/error.md`，环境与技术细节 `Development/Technology.md`。
 
 ## 红线
+
 - 不可自行修改本文件与 `Development/Development.md`；行为与它们冲突时，停下问我。
 - 不可逆操作（清空/删除文件、改系统配置）必须先停下确认，即使我已口头要求，也要先说明风险。
 - `Development/` 下的文档永不清空。
 
 ## Git
-- 项目用 git 管理。新项目首次开工时，若当前目录及上层都没有 .git，直接 `git init`、
-按项目实际技术栈写好 .gitignore（必含 `.workbuddy/`，其余按项目类型自己判断）并做首个提交。
+
+- 项目用 git 管理。新项目首次开工时，若当前目录及上层都没有 .git，直接 `git init`、  
+  按项目实际技术栈写好 .gitignore（必含 `.workbuddy/`，其余按项目类型自己判断）并做首个提交。
 - 目录里若已有备份、数据、媒体等非本项目内容（体积大），不要自动 init，先问我。
 - 上层已有 .git 或位置不确定时先问我，不要嵌套建仓库。
 - 每个任务完成后提交一次，提交信息写清改了什么、为什么；重大节点打 tag（如 v0.1、v1.0）。

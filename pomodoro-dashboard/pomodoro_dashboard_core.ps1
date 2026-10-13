@@ -182,6 +182,9 @@ $xaml = @'
       <GradientStop Color="#89F7FE" Offset="0"/>
       <GradientStop Color="#66A6FF" Offset="1"/>
     </LinearGradientBrush>
+    <!-- 番茄图标：TDesign tomato（MIT，24x24 线性描边，SVG path 直转 XAML，零依赖） -->
+    <PathGeometry x:Key="TomatoBody" Figures="M12 5.514s2.556-.763 4-.338c2.817.828 4.998 2.822 5 7.324s-3.982 9.248-7.557 8.4c-.902-.214-.867-.299-1.443-.299s-.541.085-1.443.3C7 21.743 3 16.996 3 12.5S5.113 6 8 5.175c1.447-.414 4 .338 4 .338"/>
+    <PathGeometry x:Key="TomatoStem" Figures="M9.5 3L12 5.513L14.69 3m.959 2.687l-.352.512c-1.589 2.314-5.005 2.314-6.594 0l-.352-.512M12 5.514s-2.553-.752-4-.338C5.113 6 3 8.004 3 12.5s4 9.244 7.557 8.4c.902-.214.867-.299 1.443-.299s.541.085 1.443.3c3.575.847 7.56-3.899 7.557-8.4c-.002-4.503-2.183-6.497-5-7.325c-1.444-.425-4 .338-4 .338Z"/>
     <Style x:Key="NumBox" TargetType="TextBox">
       <Setter Property="Width" Value="68"/>
       <Setter Property="Height" Value="26"/>
@@ -297,32 +300,64 @@ $xaml = @'
           <StackPanel>
             <TextBlock Text="今日" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="TodayCard" Text="0" Foreground="#2F2F2C" FontSize="20"
-                       FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
+              <TextBlock x:Name="TodayCard" Text="0" Foreground="#2F2F2C" FontSize="20"
+                         FontWeight="Bold" VerticalAlignment="Center"/>
+              <Grid Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
+                <Path Stroke="#D94848" StrokeThickness="2"
+                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                      Stretch="Uniform" Data="{StaticResource TomatoStem}"/>
+              </Grid>
+            </StackPanel>
           </StackPanel>
         </Border>
         <Border Style="{StaticResource Card}" Margin="5,0,5,0" Padding="0,8">
           <StackPanel>
             <TextBlock Text="本周" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="WeekCard" Text="0" Foreground="#4A90D9" FontSize="20"
-                       FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
+              <TextBlock x:Name="WeekCard" Text="0" Foreground="#4A90D9" FontSize="20"
+                         FontWeight="Bold" VerticalAlignment="Center"/>
+              <Grid Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
+                <Path Stroke="#D94848" StrokeThickness="2"
+                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                      Stretch="Uniform" Data="{StaticResource TomatoStem}"/>
+              </Grid>
+            </StackPanel>
           </StackPanel>
         </Border>
         <Border Style="{StaticResource Card}" Margin="5,0,5,0" Padding="0,8">
           <StackPanel>
             <TextBlock Text="本月" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="MonthCard" Text="0" Foreground="#4A90D9" FontSize="20"
-                       FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
+              <TextBlock x:Name="MonthCard" Text="0" Foreground="#4A90D9" FontSize="20"
+                         FontWeight="Bold" VerticalAlignment="Center"/>
+              <Grid Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
+                <Path Stroke="#D94848" StrokeThickness="2"
+                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                      Stretch="Uniform" Data="{StaticResource TomatoStem}"/>
+              </Grid>
+            </StackPanel>
           </StackPanel>
         </Border>
         <Border Style="{StaticResource Card}" Margin="5,0,0,0" Padding="0,8">
           <StackPanel>
             <TextBlock Text="累计" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="TotalCard" Text="0" Foreground="#2F2F2C" FontSize="20"
-                       FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
+              <TextBlock x:Name="TotalCard" Text="0" Foreground="#2F2F2C" FontSize="20"
+                         FontWeight="Bold" VerticalAlignment="Center"/>
+              <Grid Width="15" Height="15" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Path Fill="#D94848" Stretch="Uniform" Data="{StaticResource TomatoBody}"/>
+                <Path Stroke="#D94848" StrokeThickness="2"
+                      StrokeStartLineCap="Square" StrokeEndLineCap="Square"
+                      Stretch="Uniform" Data="{StaticResource TomatoStem}"/>
+              </Grid>
+            </StackPanel>
           </StackPanel>
         </Border>
       </UniformGrid>
@@ -514,6 +549,7 @@ $SaveBtn.Add_Click({
         try { $script:j.total = $newTotal } catch { }
 
         Update-Cards
+        Update-Heatmap   # 热力图跟着校准结果刷新（用户实测：保存后格子不更新）
         $script:Snapshot = Get-Snapshot
         $BtnRow.Visibility = 'Collapsed'
         $StatusText.Foreground = $conv.ConvertFromString('#2E9E63')
@@ -616,6 +652,15 @@ function Build-Heatmap {
                 $cell.ToolTip = ('{0} 周{1}：{2} 个' -f $d.ToString('MM-dd'), $wd[$r], $count)
             }
             $cell.Margin = [System.Windows.Thickness]::new(1)
+            # 格子中间写日期（日），淡灰半透明字体
+            $num = New-Object System.Windows.Controls.TextBlock
+            $num.Text = [string]$d.Day
+            $num.FontSize = 9
+            $num.Foreground = $convH.ConvertFromString('#8A8578')
+            $num.Opacity = 0.55
+            $num.HorizontalAlignment = 'Center'
+            $num.VerticalAlignment = 'Center'
+            $cell.Child = $num
             [System.Windows.Controls.Grid]::SetColumn($cell, $c + 1)
             [System.Windows.Controls.Grid]::SetRow($cell, $r + 1)
             [void]$g.Children.Add($cell)
@@ -624,7 +669,13 @@ function Build-Heatmap {
     return $g
 }
 
-if ($haveData) { [void]$HeatGrid.Children.Add((Build-Heatmap $days $now)) }
+function Update-Heatmap {
+    # 重建热力图（保存校准后必须调用，否则格子还是旧数据）
+    $HeatGrid.Children.Clear()
+    [void]$HeatGrid.Children.Add((Build-Heatmap $days $now))
+}
+
+if ($haveData) { Update-Heatmap }
 
 # ---- 无头 UI 自检：解析 XAML + 查找命名控件 + 构建热力图，不显示窗口 ----
 # 用途：SelfTest 覆盖不了 XAML/热力图构建，此前该段一旦报错只会"进程静默死亡、

@@ -101,6 +101,16 @@ function Get-WeekCount {
     return $n
 }
 
+function Get-MonthCount {
+    param($Days, [datetime]$Today)
+    $prefix = $Today.ToString('yyyy-MM')
+    $n = 0
+    foreach ($k in $Days.Keys) {
+        if ($k.StartsWith($prefix)) { $n += $Days[$k] }
+    }
+    return $n
+}
+
 function Save-State {
     # 原子写：临时文件 + Move -Force；version/phase/lastEvent 原样带回
     param($Json, $NewDays, [int]$NewTotal)
@@ -163,7 +173,7 @@ Write-OutputText '<catime></catime>'
 $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Pomodoro Dashboard" Width="560" SizeToContent="Height"
+        Title="Pomodoro Dashboard" Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" WindowStyle="None"
         AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" FontFamily="Microsoft YaHei UI" TextOptions.TextFormattingMode="Display">
@@ -173,8 +183,8 @@ $xaml = @'
       <GradientStop Color="#66A6FF" Offset="1"/>
     </LinearGradientBrush>
     <Style x:Key="NumBox" TargetType="TextBox">
-      <Setter Property="Width" Value="72"/>
-      <Setter Property="Height" Value="28"/>
+      <Setter Property="Width" Value="68"/>
+      <Setter Property="Height" Value="26"/>
       <Setter Property="Background" Value="#FFFFFF"/>
       <Setter Property="Foreground" Value="#2F2F2C"/>
       <Setter Property="BorderBrush" Value="#E3DFD6"/>
@@ -250,28 +260,36 @@ $xaml = @'
         </Grid>
       </Border>
       <!-- 概览卡片 -->
-      <UniformGrid Columns="3">
-        <Border Style="{StaticResource Card}" Margin="0,0,6,0" Padding="0,10">
+      <UniformGrid Columns="4">
+        <Border Style="{StaticResource Card}" Margin="0,0,5,0" Padding="0,8">
           <StackPanel>
             <TextBlock Text="今日" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="TodayCard" Text="0" Foreground="#2F2F2C" FontSize="22"
+            <TextBlock x:Name="TodayCard" Text="0" Foreground="#2F2F2C" FontSize="20"
                        FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
           </StackPanel>
         </Border>
-        <Border Style="{StaticResource Card}" Margin="6,0,6,0" Padding="0,10">
+        <Border Style="{StaticResource Card}" Margin="5,0,5,0" Padding="0,8">
           <StackPanel>
             <TextBlock Text="本周" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="WeekCard" Text="0" Foreground="#4A90D9" FontSize="22"
+            <TextBlock x:Name="WeekCard" Text="0" Foreground="#4A90D9" FontSize="20"
                        FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
           </StackPanel>
         </Border>
-        <Border Style="{StaticResource Card}" Margin="6,0,0,0" Padding="0,10">
+        <Border Style="{StaticResource Card}" Margin="5,0,5,0" Padding="0,8">
+          <StackPanel>
+            <TextBlock Text="本月" Foreground="#9A968C" FontSize="11"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="MonthCard" Text="0" Foreground="#4A90D9" FontSize="20"
+                       FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+          </StackPanel>
+        </Border>
+        <Border Style="{StaticResource Card}" Margin="5,0,0,0" Padding="0,8">
           <StackPanel>
             <TextBlock Text="累计" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
-            <TextBlock x:Name="TotalCard" Text="0" Foreground="#2F2F2C" FontSize="22"
+            <TextBlock x:Name="TotalCard" Text="0" Foreground="#2F2F2C" FontSize="20"
                        FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
           </StackPanel>
         </Border>
@@ -317,6 +335,7 @@ $CloseBtn  = $window.FindName('CloseBtn')
 $TodayCard = $window.FindName('TodayCard')
 $WeekCard  = $window.FindName('WeekCard')
 $TotalCard = $window.FindName('TotalCard')
+$MonthCard = $window.FindName('MonthCard')
 $HintText  = $window.FindName('HintText')
 $DayRows   = $window.FindName('DayRows')
 $TotalBox  = $window.FindName('TotalBox')
@@ -349,8 +368,8 @@ for ($i = 0; $i -lt 7; $i++) {
 
     $card = New-Object System.Windows.Controls.Border
     $card.Style = $window.Resources['Card']
-    $card.Padding = [System.Windows.Thickness]::new(12, 6, 12, 6)
-    $card.Margin = [System.Windows.Thickness]::new(0, 0, 0, 5)
+    $card.Padding = [System.Windows.Thickness]::new(10, 5, 10, 5)
+    $card.Margin = [System.Windows.Thickness]::new(0, 0, 0, 4)
     $grid = New-Object System.Windows.Controls.Grid
     [void]$grid.Children.Add($lbl)
     [void]$grid.Children.Add($box)
@@ -364,6 +383,7 @@ function Update-Cards {
     if ($days.ContainsKey($todayKey)) { $t = $days[$todayKey] }
     $TodayCard.Text = [string]$t
     $WeekCard.Text  = [string](Get-WeekCount $days $now)
+    $MonthCard.Text = [string](Get-MonthCount $days $now)
     $total = 0
     if ($haveData) { try { $total = [int]$j.total } catch { } }
     $TotalCard.Text = [string]$total

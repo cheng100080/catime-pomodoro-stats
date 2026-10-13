@@ -241,6 +241,34 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
+    <Style x:Key="PillTab" TargetType="TabItem">
+      <Setter Property="Foreground" Value="#9A968C"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border x:Name="TabBorder" CornerRadius="8" Padding="16,7"
+                    Background="Transparent" BorderBrush="Transparent" BorderThickness="1">
+              <ContentPresenter ContentSource="Header"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="TabBorder" Property="Background" Value="#F0EDE7"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="TabBorder" Property="Background" Value="#FFFFFF"/>
+                <Setter TargetName="TabBorder" Property="BorderBrush" Value="#ECE8E0"/>
+                <Setter Property="Foreground" Value="#2F2F2C"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
   <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1">
     <StackPanel Margin="22,0,22,14">
@@ -259,6 +287,9 @@ $xaml = @'
                   FontSize="12" Cursor="Hand"/>
         </Grid>
       </Border>
+      <!-- 标签页：概览 / 热力图（V2） -->
+      <TabControl x:Name="MainTabs" Background="Transparent" BorderThickness="0" Margin="0,2,0,0">
+        <TabItem Header="概览" Style="{StaticResource PillTab}">
       <!-- 概览卡片 -->
       <UniformGrid Columns="4">
         <Border Style="{StaticResource Card}" Margin="0,0,5,0" Padding="0,8">
@@ -314,6 +345,29 @@ $xaml = @'
       <!-- 底部统一提示 -->
       <TextBlock Text="单击数字可人工校准数量" Foreground="#B3AEA4" FontSize="11"
                  HorizontalAlignment="Center" Margin="0,10,0,0"/>
+        </TabItem>
+        <TabItem Header="热力图" Style="{StaticResource PillTab}">
+          <StackPanel Margin="0,10,0,0">
+            <TextBlock Text="近 12 周每日完成度" Foreground="#2F2F2C" FontSize="13"
+                       FontWeight="Bold" Margin="2,0,0,8"/>
+            <Grid x:Name="HeatGrid"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+              <TextBlock Text="少" Foreground="#9A968C" FontSize="11" VerticalAlignment="Center"/>
+              <Rectangle Width="110" Height="6" RadiusX="3" RadiusY="3" Margin="8,0">
+                <Rectangle.Fill>
+                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#2666A6FF" Offset="0"/>
+                    <GradientStop Color="#66A6FF" Offset="1"/>
+                  </LinearGradientBrush>
+                </Rectangle.Fill>
+              </Rectangle>
+              <TextBlock Text="多" Foreground="#9A968C" FontSize="11" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock Text="格子颜色越深表示当日完成越多；悬停可查看具体数值" Foreground="#B3AEA4"
+                       FontSize="11" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+          </StackPanel>
+        </TabItem>
+      </TabControl>
     </StackPanel>
   </Border>
 </Window>
@@ -468,5 +522,106 @@ $SaveBtn.Add_Click({
         $StatusText.Foreground = $conv.ConvertFromString('#D9534F')
     }
 })
+
+# ---- 热力图（V2：近 12 周打卡图，行=周一..周日，列=周，颜色深浅映射当日完成数） ----
+$HeatGrid = $window.FindName('HeatGrid')
+
+function Build-Heatmap {
+    param($Days, [datetime]$Now)
+
+    $g = New-Object System.Windows.Controls.Grid
+
+    # 列：0=星期标签列，1..12=周；行：0=月份标签行，1..7=周一..周日
+    $col0 = [System.Windows.Controls.ColumnDefinition]::new()
+    $col0.Width = [System.Windows.GridLength]::new(24)
+    [void]$g.ColumnDefinitions.Add($col0)
+    for ($c = 0; $c -lt 12; $c++) {
+        $cd = [System.Windows.Controls.ColumnDefinition]::new()
+        $cd.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
+        [void]$g.ColumnDefinitions.Add($cd)
+    }
+    $r0 = [System.Windows.Controls.RowDefinition]::new()
+    $r0.Height = [System.Windows.GridLength]::new(16)
+    [void]$g.RowDefinitions.Add($r0)
+    for ($r = 0; $r -lt 7; $r++) {
+        $rd = [System.Windows.Controls.RowDefinition]::new()
+        $rd.Height = [System.Windows.GridLength]::new(22)
+        [void]$g.RowDefinitions.Add($rd)
+    }
+
+    # 先求窗口内最大值（透明度映射基准），避免历史单日极值压淡近期数据
+    $curWeek = Get-WeekStart $Now
+    $max = 1
+    for ($c = 0; $c -lt 12; $c++) {
+        $ws = $curWeek.AddDays(-7 * (11 - $c))
+        for ($r = 0; $r -lt 7; $r++) {
+            $dk = $ws.AddDays($r).ToString('yyyy-MM-dd')
+            if ($Days.ContainsKey($dk) -and $Days[$dk] -gt $max) { $max = $Days[$dk] }
+        }
+    }
+
+    $convH    = [System.Windows.Media.BrushConverter]::new()
+    $accent   = $convH.ConvertFromString('#66A6FF')
+    $emptyBg  = $convH.ConvertFromString('#EFEDE8')
+    $futureBg = $convH.ConvertFromString('#F4F2EC')
+    $wd = @('一','二','三','四','五','六','日')
+
+    for ($r = 0; $r -lt 7; $r++) {
+        $lbl = New-Object System.Windows.Controls.TextBlock
+        $lbl.Text = $wd[$r]
+        $lbl.FontSize = 10
+        $lbl.Foreground = $convH.ConvertFromString('#B3AEA4')
+        $lbl.HorizontalAlignment = 'Center'
+        $lbl.VerticalAlignment = 'Center'
+        [System.Windows.Controls.Grid]::SetColumn($lbl, 0)
+        [System.Windows.Controls.Grid]::SetRow($lbl, $r + 1)
+        [void]$g.Children.Add($lbl)
+    }
+
+    $prevMonth = -1
+    for ($c = 0; $c -lt 12; $c++) {
+        $ws = $curWeek.AddDays(-7 * (11 - $c))
+        if ($ws.Month -ne $prevMonth) {
+            $ml = New-Object System.Windows.Controls.TextBlock
+            $ml.Text = $ws.ToString('M月')
+            $ml.FontSize = 10
+            $ml.Foreground = $convH.ConvertFromString('#9A968C')
+            $ml.HorizontalAlignment = 'Left'
+            [System.Windows.Controls.Grid]::SetColumn($ml, $c + 1)
+            [System.Windows.Controls.Grid]::SetRow($ml, 0)
+            [void]$g.Children.Add($ml)
+            $prevMonth = $ws.Month
+        }
+        for ($r = 0; $r -lt 7; $r++) {
+            $d = $ws.AddDays($r)
+            $dk = $d.ToString('yyyy-MM-dd')
+            $future = $d -gt $Now.Date
+            $count = 0
+            if ($Days.ContainsKey($dk)) { $count = $Days[$dk] }
+
+            $cell = New-Object System.Windows.Controls.Border
+            $cell.CornerRadius = [System.Windows.CornerRadius]::new(3)
+            if ($future) {
+                $cell.Background = $futureBg
+            }
+            elseif ($count -le 0) {
+                $cell.Background = $emptyBg
+            }
+            else {
+                $b = $accent.Clone()
+                $b.Opacity = 0.25 + 0.75 * ($count / $max)
+                $cell.Background = $b
+                $cell.ToolTip = ('{0} 周{1}：{2} 个' -f $d.ToString('MM-dd'), $wd[$r], $count)
+            }
+            $cell.Margin = [System.Windows.Thickness]::new(1)
+            [System.Windows.Controls.Grid]::SetColumn($cell, $c + 1)
+            [System.Windows.Controls.Grid]::SetRow($cell, $r + 1)
+            [void]$g.Children.Add($cell)
+        }
+    }
+    return $g
+}
+
+if ($haveData) { [void]$HeatGrid.Children.Add((Build-Heatmap $days $now)) }
 
 [void]$window.ShowDialog()

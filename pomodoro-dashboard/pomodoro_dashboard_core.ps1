@@ -302,15 +302,6 @@ $xaml = @'
       <TextBlock Text="近 7 天" Foreground="#2F2F2C" FontSize="13"
                  FontWeight="Bold" Margin="2,4,0,6"/>
       <StackPanel x:Name="DayRows"/>
-      <!-- 累计 -->
-      <TextBlock Text="累计" Foreground="#2F2F2C" FontSize="13"
-                 FontWeight="Bold" Margin="2,8,0,6"/>
-      <Border Style="{StaticResource Card}" Padding="12,7" Margin="0,0,0,12">
-        <Grid>
-          <TextBlock Text="累计完成" Style="{StaticResource DayLabel}"/>
-          <TextBox x:Name="TotalBox" Style="{StaticResource NumBox}"/>
-        </Grid>
-      </Border>
       <!-- 按钮：默认隐藏，编辑任意数字后出现 -->
       <StackPanel x:Name="BtnRow" Orientation="Horizontal" HorizontalAlignment="Center"
                   Visibility="Collapsed">
@@ -338,7 +329,6 @@ $TotalCard = $window.FindName('TotalCard')
 $MonthCard = $window.FindName('MonthCard')
 $HintText  = $window.FindName('HintText')
 $DayRows   = $window.FindName('DayRows')
-$TotalBox  = $window.FindName('TotalBox')
 $BtnRow    = $window.FindName('BtnRow')
 $SaveBtn   = $window.FindName('SaveBtn')
 $CancelBtn = $window.FindName('CancelBtn')
@@ -384,16 +374,17 @@ function Update-Cards {
     $TodayCard.Text = [string]$t
     $WeekCard.Text  = [string](Get-WeekCount $days $now)
     $MonthCard.Text = [string](Get-MonthCount $days $now)
-    $total = 0
-    if ($haveData) { try { $total = [int]$j.total } catch { } }
-    $TotalCard.Text = [string]$total
+    # 累计改为派生：= 全部每日明细合计（保存时同步重写 json.total，
+    # 与统计插件显示保持一致；不再提供独立编辑入口，避免手工改数后对不上）
+    $sum = 0
+    foreach ($v in $days.Values) { $sum += $v }
+    $TotalCard.Text = [string]$sum
 }
 
 function Get-Snapshot {
     # 当前界面值的快照（供"取消"还原）
     $snap = @{}
     foreach ($e in $DayBoxes.GetEnumerator()) { $snap[$e.Key] = $e.Value.Text }
-    $snap['__total__'] = $TotalBox.Text
     return $snap
 }
 
@@ -402,19 +393,16 @@ function Apply-Snapshot($snap) {
     foreach ($e in $DayBoxes.GetEnumerator()) {
         if ($snap.ContainsKey($e.Key)) { $e.Value.Text = $snap[$e.Key] }
     }
-    if ($snap.ContainsKey('__total__')) { $TotalBox.Text = $snap['__total__'] }
     $script:SuppressEditEvent = $false
 }
 
 if ($haveData) {
     Update-Cards
-    $TotalBox.Text = [string]([int]$j.total)
 }
 else {
     $HintText.Text = $state.Reason + '。请先运行统计插件（pomodoro_stats_launcher）生成数据。'
     $HintText.Foreground = $conv.ConvertFromString('#D9534F')
     foreach ($b in $DayBoxes.Values) { $b.IsEnabled = $false }
-    $TotalBox.IsEnabled = $false
 }
 $script:Snapshot = Get-Snapshot
 $script:SuppressEditEvent = $false
@@ -432,9 +420,6 @@ foreach ($b in $DayBoxes.Values) {
         if (-not $script:SuppressEditEvent) { $BtnRow.Visibility = 'Visible' }
     })
 }
-$TotalBox.Add_TextChanged({
-    if (-not $script:SuppressEditEvent) { $BtnRow.Visibility = 'Visible' }
-})
 
 # 取消：还原到最近一次保存的值，按钮收起
 $CancelBtn.Add_Click({
@@ -444,7 +429,7 @@ $CancelBtn.Add_Click({
 })
 
 $SaveBtn.Add_Click({
-    # 校验：全部为非负整数
+    # 校验：每日数值均为非负整数
     $vals = @{}
     $bad = $false
     $normalBrush = $conv.ConvertFromString('#E3DFD6')
@@ -454,9 +439,6 @@ $SaveBtn.Add_Click({
         if ($t -match '^\d+$') { $vals[$e.Key] = [int]$t; $e.Value.BorderBrush = $normalBrush }
         else { $e.Value.BorderBrush = $badBrush; $bad = $true }
     }
-    $t2 = $TotalBox.Text.Trim()
-    if ($t2 -match '^\d+$') { $TotalBox.BorderBrush = $normalBrush }
-    else { $TotalBox.BorderBrush = $badBrush; $bad = $true }
 
     if ($bad) {
         $StatusText.Text = '有非法输入（需为非负整数），未保存。'
@@ -465,20 +447,21 @@ $SaveBtn.Add_Click({
     }
 
     try {
-        # 合并：仅替换近 7 天 + total，其余历史日期原样保留
+        # 合并：仅替换近 7 天，其余历史日期原样保留
         $newDays = [hashtable]$days.Clone()
         foreach ($e in $vals.GetEnumerator()) { $newDays[$e.Key] = $e.Value }
-        $newTotal = [int]$t2
+        # 累计 = 全部明细合计（与统计插件计数口径天然一致，杜绝手工改数后对不上）
+        $newTotal = 0
+        foreach ($v in $newDays.Values) { $newTotal += $v }
         Save-State $j $newDays $newTotal
         $script:days = $newDays
         try { $script:j.total = $newTotal } catch { }
 
         Update-Cards
-        $TotalCard.Text = [string]$newTotal
         $script:Snapshot = Get-Snapshot
         $BtnRow.Visibility = 'Collapsed'
         $StatusText.Foreground = $conv.ConvertFromString('#2E9E63')
-        $StatusText.Text = '已保存。请手动重新运行统计插件（pomodoro_stats_launcher）使修改生效。'
+        $StatusText.Text = ('已保存。累计已按每日明细自动对账为 {0}。请手动重新运行统计插件（pomodoro_stats_launcher）使修改生效。' -f $newTotal)
     }
     catch {
         $StatusText.Text = '保存失败：' + $_.Exception.Message

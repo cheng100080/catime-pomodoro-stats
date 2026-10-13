@@ -23,7 +23,7 @@
 #>
 
 #requires -version 5.1
-param([switch]$SelfTest)
+param([switch]$SelfTest, [switch]$UiCheck)
 
 $ErrorActionPreference = 'Stop'
 
@@ -290,6 +290,7 @@ $xaml = @'
       <!-- 标签页：概览 / 热力图（V2） -->
       <TabControl x:Name="MainTabs" Background="Transparent" BorderThickness="0" Margin="0,2,0,0">
         <TabItem Header="概览" Style="{StaticResource PillTab}">
+        <StackPanel>
       <!-- 概览卡片 -->
       <UniformGrid Columns="4">
         <Border Style="{StaticResource Card}" Margin="0,0,5,0" Padding="0,8">
@@ -345,6 +346,7 @@ $xaml = @'
       <!-- 底部统一提示 -->
       <TextBlock Text="单击数字可人工校准数量" Foreground="#B3AEA4" FontSize="11"
                  HorizontalAlignment="Center" Margin="0,10,0,0"/>
+        </StackPanel>
         </TabItem>
         <TabItem Header="热力图" Style="{StaticResource PillTab}">
           <StackPanel Margin="0,10,0,0">
@@ -623,5 +625,20 @@ function Build-Heatmap {
 }
 
 if ($haveData) { [void]$HeatGrid.Children.Add((Build-Heatmap $days $now)) }
+
+# ---- 无头 UI 自检：解析 XAML + 查找命名控件 + 构建热力图，不显示窗口 ----
+# 用途：SelfTest 覆盖不了 XAML/热力图构建，此前该段一旦报错只会"进程静默死亡、
+# 用户看不到弹窗"。UiCheck 把这段变成可确定性验证的检查（check_dashboard.py E10）。
+if ($UiCheck) {
+    $probe = Build-Heatmap $days $now
+    $missing = @()
+    foreach ($n in @('TitleBar','CloseBtn','TodayCard','WeekCard','MonthCard','TotalCard',
+                     'HintText','DayRows','BtnRow','SaveBtn','CancelBtn','StatusText',
+                     'HeatGrid','MainTabs')) {
+        if ($null -eq $window.FindName($n)) { $missing += $n }
+    }
+    Write-Output ("UICHECK: OK heatmap_children={0} missing={1}" -f $probe.Children.Count, ($missing -join ','))
+    exit 0
+}
 
 [void]$window.ShowDialog()

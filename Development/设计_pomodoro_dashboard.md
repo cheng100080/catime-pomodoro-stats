@@ -178,11 +178,14 @@ V2 实现时按此结论执行，不再重新评估（除非用户明确放宽�
 - 一律用 WPF 原生自绘实现（§13 选型结论），配色与 v1 浅色卡片同源
 
 ### 图标调研结论（2026-10-13 实证）
-- **Twemoji 1f345 有**（CC-BY 4.0），SVG 已取回（`_tmp/icons/twemoji_1f345_tomato.svg`）
-- Tabler / Lucide / Font Awesome Free **均无** tomato（官网 404 / raw 404 实证；
-  FA 的 tomato 为 Pro 专属，非 Free）
-- 化解卡通感两条路线：①单色化（只取红色果身 path）②缩小作点缀（12~14px）
-- License 备案：Twemoji CC-BY 4.0，来源 jdecked/twemoji（原 twitter/twemoji）
+- **TDesign 有 tomato**（MIT，24×24 线性描边，几何极简）——四库之外新增来源的
+  最佳候选，SVG 已取回（`_tmp/icons/tdesign_tomato.svg`）
+- Tabler / Lucide / Font Awesome Free **均无** tomato（404 实证；
+  FA 的 tomato 为 Pro 专属，非 Free）；四库 strawberry 皆无
+- SVG Silh / SVG Repo / Iconfont：本轮未能实证（官网 404/验证页拦截/需账号）
+- 替代方案：Tabler/Lucide/TDesign 的 apple、cherry 均有（线性描边）；
+  相似度 apple 中高（圆果+蒂）、cherry 中（双果需取舍）
+- 候选 SVG 与对比预览在 `_tmp/icons/`（preview_extended.html）
 
 ### 顶部卡片番茄图标（用户已定方案，等素材）
 - **内容**：顶部四张卡片（今日/本周/本月/累计）的数字后面加番茄图标作为单位，

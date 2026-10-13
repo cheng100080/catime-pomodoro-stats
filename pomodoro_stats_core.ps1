@@ -588,8 +588,12 @@ function Invoke-PhaseComplete {
             $best = -1
             $bestErr = [double]::MaxValue
             $curErr = [double]::MaxValue
+            # 用间隔匹配阶段时长（容忍暂停造成的偏差），实现阶段索引自纠正。
+            # 容差随段长缩放、下限 2 秒（覆盖检测抖动）：原来的固定 60s 下限
+            # 在小段长测试序列（如 5,10,5）下会让任何间隔都命中所有段，
+            # 把工作段误判成休息段导致漏计；匹配失败时回退顺序索引，行为正确。
             for ($i = 0; $i -lt $n; $i++) {
-                $tol = [math]::Max(60, $Pattern[$i] * 0.15)
+                $tol = [math]::Max(2, $Pattern[$i] * 0.15)
                 $err = [math]::Abs($gap - $Pattern[$i])
                 if ($err -le $tol) {
                     if ($err -lt $bestErr) { $bestErr = $err; $best = $i }
@@ -696,6 +700,11 @@ while ($true) {
                 Write-Log ("配置已重载: 类型={0} 阶段序列={1}" -f $cfg.Type, ($cfg.Pattern -join ','))
                 Write-Log ("阶段类型: {0}（{1}）" -f `
                     (($workMask | ForEach-Object { if ($_) { 'W' } else { 'B' } }) -join ''), $maskSource)
+                # 缩放变化会写回 config.ini 触发本分支：必须立即重算统计行 spec，
+                # 否则图片要等下一次计数才恢复固定大小（v0.18 用户实测问题）
+                if ($cfg.Type -eq 'CATIME' -and -not $hintShown) {
+                    Refresh-Display $state
+                }
             }
         }
 

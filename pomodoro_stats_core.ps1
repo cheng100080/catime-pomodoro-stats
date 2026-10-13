@@ -106,6 +106,9 @@ $PhaseTypes = ''
 # 轮询间隔（毫秒）。Catime 默认 toast 显示 3 秒以上，500ms 足够捕捉。
 $PollMs = 500
 
+# 插件版本号（写入启动日志，便于确认运行的代码版本）
+$PluginVersion = 'v0.19'
+
 # Catime 通知弹窗的窗口类名（源码 resource_ui_ids.h 定义，请勿改动）
 $ToastClass = 'CatimeNotificationClass'
 
@@ -661,8 +664,8 @@ $AnchorMode = switch ($PluginAnchor) {
     default       { 0 }
 }
 
-Write-Log ("启动: PS={0} 配置={1} 类型={2} 阶段序列={3}" -f `
-    $PSVersionTable.PSVersion, $ConfigFile, $cfg.Type, ($cfg.Pattern -join ','))
+Write-Log ("启动: 版本={0} PS={1} 配置={2} 类型={3} 阶段序列={4}" -f `
+    $PluginVersion, $PSVersionTable.PSVersion, $ConfigFile, $cfg.Type, ($cfg.Pattern -join ','))
 Write-Log ("阶段类型: {0} → {1}（{2}）" -f `
     ($cfg.Pattern -join ','), (($workMask | ForEach-Object { if ($_) { 'W' } else { 'B' } }) -join ''), $maskSource)
 

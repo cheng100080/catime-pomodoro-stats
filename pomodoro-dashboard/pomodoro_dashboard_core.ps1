@@ -274,6 +274,19 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- TabControl 干净模板：去掉默认模板的选中连接铬边（它会把选中标签右边缘画成直线） -->
+    <Style x:Key="CleanTabControl" TargetType="TabControl">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabControl">
+            <DockPanel Background="{TemplateBinding Background}">
+              <TabPanel DockPanel.Dock="Top" IsItemsHost="True" Background="Transparent"/>
+              <ContentPresenter ContentSource="SelectedContent"/>
+            </DockPanel>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
   <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1">
     <StackPanel Margin="22,0,22,14">
@@ -293,7 +306,7 @@ $xaml = @'
         </Grid>
       </Border>
       <!-- 标签页：概览 / 热力图（V2） -->
-      <TabControl x:Name="MainTabs" Background="Transparent" BorderThickness="0" Margin="0,2,0,0">
+      <TabControl x:Name="MainTabs" Style="{StaticResource CleanTabControl}" Margin="0,2,0,0">
         <TabItem Header="概览" Style="{StaticResource PillTab}">
         <StackPanel>
       <!-- 概览卡片 -->
@@ -303,7 +316,7 @@ $xaml = @'
             <TextBlock Text="今日" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
-              <TextBlock x:Name="TodayCard" Text="0" Foreground="#2F2F2C" FontSize="20"
+              <TextBlock x:Name="TodayCard" Text="0" Foreground="#4A90D9" FontSize="20"
                          FontWeight="Bold" VerticalAlignment="Center"/>
               <!-- Viewbox 统一缩放：三个 Path 必须共享同一变换。
                    若各自 Stretch=Uniform，小几何体(蒂叶)会被单独拉伸填满槽位盖住果身 -->
@@ -372,7 +385,7 @@ $xaml = @'
             <TextBlock Text="累计" Foreground="#9A968C" FontSize="11"
                        HorizontalAlignment="Center"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
-              <TextBlock x:Name="TotalCard" Text="0" Foreground="#2F2F2C" FontSize="20"
+              <TextBlock x:Name="TotalCard" Text="0" Foreground="#4A90D9" FontSize="20"
                          FontWeight="Bold" VerticalAlignment="Center"/>
               <!-- Viewbox 统一缩放：三个 Path 必须共享同一变换。
                    若各自 Stretch=Uniform，小几何体(蒂叶)会被单独拉伸填满槽位盖住果身 -->

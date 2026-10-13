@@ -170,6 +170,20 @@ HeatMapSeries+LineSeries 齐全、维护活跃）——但需随插件带 2 个 
 
 V2 实现时按此结论执行，不再重新评估（除非用户明确放宽依赖约束）。
 
+### V2/V3 视觉参考（用户指定，仅参考不移植代码）
+- **趋势折线**：ECharts line-bump（https://echarts.apache.org/examples/zh/editor.html?c=line-bump）
+  参考点：平滑曲线、圆点、淡色网格、端标签、适中线宽
+- **热力图**：ECharts heatmap-punchcard（https://echarts.apache.org/examples/zh/editor.html?c=heatmap-punchcard）
+  参考点：格子矩阵、颜色深浅映射数值、悬停提示、颜色条
+- 一律用 WPF 原生自绘实现（§13 选型结论），配色与 v1 浅色卡片同源
+
+### 图标调研结论（2026-10-13 实证）
+- **Twemoji 1f345 有**（CC-BY 4.0），SVG 已取回（`_tmp/icons/twemoji_1f345_tomato.svg`）
+- Tabler / Lucide / Font Awesome Free **均无** tomato（官网 404 / raw 404 实证；
+  FA 的 tomato 为 Pro 专属，非 Free）
+- 化解卡通感两条路线：①单色化（只取红色果身 path）②缩小作点缀（12~14px）
+- License 备案：Twemoji CC-BY 4.0，来源 jdecked/twemoji（原 twitter/twemoji）
+
 ### 顶部卡片番茄图标（用户已定方案，等素材）
 - **内容**：顶部四张卡片（今日/本周/本月/累计）的数字后面加番茄图标作为单位，
   替换默认 emoji 或纯文本

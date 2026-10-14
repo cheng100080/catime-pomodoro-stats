@@ -23,7 +23,7 @@
 #>
 
 #requires -version 5.1
-param([switch]$SelfTest, [switch]$UiCheck, [int]$RenderTab = -1, [int]$RenderGran = -1)
+param([switch]$SelfTest, [switch]$UiCheck, [int]$RenderTab = -1, [int]$RenderGran = -1, [int]$RenderPeriod = -1)
 
 $ErrorActionPreference = 'Stop'
 
@@ -256,6 +256,7 @@ $xaml = @'
               </ToggleButton>
               <ContentPresenter x:Name="ComboText" IsHitTestVisible="False"
                                 Content="{TemplateBinding SelectionBoxItem}"
+                                VerticalAlignment="Center"
                                 Margin="{TemplateBinding Padding}"/>
               <Popup x:Name="ComboPopup" Placement="Bottom" AllowsTransparency="True"
                      Focusable="False" PopupAnimation="Slide"
@@ -384,7 +385,8 @@ $xaml = @'
         </Grid>
       </Border>
       <!-- 标签页：概览 / 热力图（V2） -->
-      <TabControl x:Name="MainTabs" Style="{StaticResource CleanTabControl}" Margin="0,2,0,0">
+      <TabControl x:Name="MainTabs" Style="{StaticResource CleanTabControl}"
+                  Background="Transparent" Margin="0,2,0,0">
         <TabItem Header="概览" Style="{StaticResource PillTab}">
         <StackPanel>
       <!-- 概览卡片 -->
@@ -539,7 +541,7 @@ $xaml = @'
             <!-- 控制行：粒度 / 周期 / 年导航（年粒度时显示） -->
             <StackPanel Orientation="Horizontal" Margin="2,0,0,8">
               <ComboBox x:Name="GranCombo" Width="84" Style="{StaticResource LightCombo}"/>
-              <ComboBox x:Name="PeriodCombo" Width="160" Margin="8,0,0,0"
+              <ComboBox x:Name="PeriodCombo" Width="210" Margin="8,0,0,0"
                         Style="{StaticResource LightCombo}"/>
               <StackPanel x:Name="YearNav" Orientation="Horizontal" Visibility="Collapsed"
                           Margin="8,0,0,0" VerticalAlignment="Center">
@@ -1009,15 +1011,17 @@ function Update-Trend {
     $labelBr   = $convT.ConvertFromString('#9A968C')
     $accentBr  = $convT.ConvertFromString('#66A6FF')
 
-    # 横向网格 + Y 轴标签（4 档）
-    for ($g = 0; $g -le 3; $g++) {
-        $y = $padT + $plotH * $g / 3.0
+    # 横向网格 + Y 轴标签（全 0 数据时用 2 档，避免刻度重复）
+    $divs = 3
+    if ($maxV -le 1) { $divs = 1 }
+    for ($g = 0; $g -le $divs; $g++) {
+        $y = $padT + $plotH * $g / $divs
         $ln = New-Object System.Windows.Shapes.Line
         $ln.X1 = $padL; $ln.Y1 = $y; $ln.X2 = $CW - $padR; $ln.Y2 = $y
         $ln.Stroke = $gridBrush; $ln.StrokeThickness = 1
         [void]$TrendCanvas.Children.Add($ln)
         $lb = New-Object System.Windows.Controls.TextBlock
-        $lb.Text = [string][int][math]::Round($maxV * (3 - $g) / 3.0)
+        $lb.Text = [string][int][math]::Round($maxV * ($divs - $g) / $divs)
         $lb.FontSize = 9; $lb.Foreground = $labelBr
         $lb.Width = 24; $lb.TextAlignment = 'Right'
         [System.Windows.Controls.Canvas]::SetLeft($lb, 0)
@@ -1179,6 +1183,9 @@ $GranCombo.Add_SelectionChanged({
     Update-Trend
 })
 
+# 周期切换（选具体哪周/哪月）：重画
+$PeriodCombo.Add_SelectionChanged({ Update-Trend })
+
 # 初始：选"周"触发 SelectionChanged → 填周期下拉 + 画当前周
 $GranCombo.SelectedIndex = 0
 
@@ -1186,6 +1193,9 @@ $GranCombo.SelectedIndex = 0
 # 用法：-RenderTab 0|1|2 [-RenderGran 0|1|2]，输出到 $env:TEMP
 if ($RenderTab -ge 0) {
     if ($RenderGran -ge 0 -and $RenderGran -le 2) { $GranCombo.SelectedIndex = $RenderGran }
+    if ($RenderPeriod -ge 0 -and $RenderPeriod -lt $PeriodCombo.Items.Count) {
+        $PeriodCombo.SelectedIndex = $RenderPeriod
+    }
     $tabsCtrl = $window.FindName('MainTabs')
     $tabsCtrl.SelectedIndex = $RenderTab
     $c2 = $window.Content

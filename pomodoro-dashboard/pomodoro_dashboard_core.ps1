@@ -395,9 +395,18 @@ $xaml = @'
       <TextBlock x:Name="HintText" Foreground="#9A968C" FontSize="11" Margin="2,10,0,2"
                  TextWrapping="Wrap"
                  Text="校准前请先停止统计插件（从 Catime 菜单启动本面板会自动停止）。"/>
-      <!-- 近 7 天 -->
-      <TextBlock Text="近 7 天" Foreground="#2F2F2C" FontSize="13"
-                 FontWeight="Bold" Margin="2,4,0,6"/>
+      <!-- 每日校准（↑↓ 翻页可校准 400 天内的更早日期） -->
+      <Grid Margin="2,4,0,6">
+        <TextBlock x:Name="DayHeader" Text="近 7 天" Foreground="#2F2F2C" FontSize="13"
+                   FontWeight="Bold" VerticalAlignment="Center"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="DayUp" Content="&#8593;" Width="26" Height="22" FontSize="11"
+                  Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#55524B" Cursor="Hand"
+                  Margin="0,0,4,0"/>
+          <Button x:Name="DayDown" Content="&#8595;" Width="26" Height="22" FontSize="11"
+                  Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#55524B" Cursor="Hand"/>
+        </StackPanel>
+      </Grid>
       <StackPanel x:Name="DayRows"/>
       <!-- 按钮：默认隐藏，编辑任意数字后出现 -->
       <StackPanel x:Name="BtnRow" Orientation="Horizontal" HorizontalAlignment="Center"
@@ -484,35 +493,61 @@ $StatusText = $window.FindName('StatusText')
 $conv = [System.Windows.Media.BrushConverter]::new()
 $script:SuppressEditEvent = $true   # 初始填充不触发"已编辑"显隐
 
-# ---- 生成 7 天编辑行（今天在最上） ----
-$DayBoxes = @{}   # 日期键 -> TextBox
-for ($i = 0; $i -lt 7; $i++) {
-    $dt = $now.Date.AddDays(-$i)
-    $dk = $dt.ToString('yyyy-MM-dd')
-    $c = 0
-    if ($days.ContainsKey($dk)) { $c = $days[$dk] }
+# ---- 7 天编辑行（↑↓ 翻页可校准 400 天内的更早日期） ----
+$DayBoxes  = @{}     # 日期键 -> TextBox（仅当前页）
+$DayUp     = $window.FindName('DayUp')
+$DayDown   = $window.FindName('DayDown')
+$DayHeader = $window.FindName('DayHeader')
+$script:Overlay   = @{}                    # 未保存的人工修改（翻页不丢）
+$script:PageStart = $now.Date.AddDays(-6)  # 当前页首行日期（默认今天在最上）
 
-    $lbl = New-Object System.Windows.Controls.TextBlock
-    $lbl.Style = $window.Resources['DayLabel']
-    $name = $dt.ToString('MM-dd') + ' ' + $weekCn[[int]$dt.DayOfWeek]
-    if ($i -eq 0) { $name += '（今天）' }
-    $lbl.Text = $name
+function Build-DayRows {
+    $DayRows.Children.Clear()
+    $DayBoxes.Clear()
+    $start = $script:PageStart
+    for ($i = 0; $i -lt 7; $i++) {
+        $dt = $start.AddDays($i)
+        if ($dt -gt $now.Date) { break }    # 不显示未来日期
+        $dk = $dt.ToString('yyyy-MM-dd')
+        $c = 0
+        if ($script:Overlay.ContainsKey($dk)) { $c = $script:Overlay[$dk] }
+        elseif ($days.ContainsKey($dk)) { $c = $days[$dk] }
 
-    $box = New-Object System.Windows.Controls.TextBox
-    $box.Style = $window.Resources['NumBox']
-    $box.Text = [string]$c
-    $DayBoxes[$dk] = $box
+        $lbl = New-Object System.Windows.Controls.TextBlock
+        $lbl.Style = $window.Resources['DayLabel']
+        $name = $dt.ToString('MM-dd') + ' ' + $weekCn[[int]$dt.DayOfWeek]
+        if ($dt -eq $now.Date) { $name += '（今天）' }
+        $lbl.Text = $name
 
-    $card = New-Object System.Windows.Controls.Border
-    $card.Style = $window.Resources['Card']
-    $card.Padding = [System.Windows.Thickness]::new(10, 5, 10, 5)
-    $card.Margin = [System.Windows.Thickness]::new(0, 0, 0, 4)
-    $grid = New-Object System.Windows.Controls.Grid
-    [void]$grid.Children.Add($lbl)
-    [void]$grid.Children.Add($box)
-    $card.Child = $grid
-    $DayRows.Children.Add($card) | Out-Null
+        $box = New-Object System.Windows.Controls.TextBox
+        $box.Style = $window.Resources['NumBox']
+        $box.Text = [string]$c
+        $box.Add_TextChanged({
+            if (-not $script:SuppressEditEvent) { $BtnRow.Visibility = 'Visible' }
+        })
+        $DayBoxes[$dk] = $box
+
+        $card = New-Object System.Windows.Controls.Border
+        $card.Style = $window.Resources['Card']
+        $card.Padding = [System.Windows.Thickness]::new(10, 5, 10, 5)
+        $card.Margin = [System.Windows.Thickness]::new(0, 0, 0, 4)
+        $grid = New-Object System.Windows.Controls.Grid
+        [void]$grid.Children.Add($lbl)
+        [void]$grid.Children.Add($box)
+        $card.Child = $grid
+        $DayRows.Children.Add($card) | Out-Null
+    }
+    # 页眉与翻页按钮状态
+    if ($start -eq $now.Date.AddDays(-6)) {
+        $DayHeader.Text = '近 7 天'
+    }
+    else {
+        $DayHeader.Text = ('更早 7 天（{0} ~ {1}）' -f $start.ToString('MM-dd'), $start.AddDays(6).ToString('MM-dd'))
+    }
+    $DayUp.IsEnabled = ($start -lt $now.Date.AddDays(-6))
+    $DayDown.IsEnabled = ($start -gt $now.Date.AddDays(-394))
 }
+Build-DayRows
 
 # ---- 数据填充 / 无数据降级 ----
 function Update-Cards {
@@ -528,19 +563,12 @@ function Update-Cards {
     $TotalCard.Text = [string]$sum
 }
 
-function Get-Snapshot {
-    # 当前界面值的快照（供"取消"还原）
-    $snap = @{}
-    foreach ($e in $DayBoxes.GetEnumerator()) { $snap[$e.Key] = $e.Value.Text }
-    return $snap
-}
-
-function Apply-Snapshot($snap) {
-    $script:SuppressEditEvent = $true
+function Capture-VisibleEdits {
+    # 把当前页输入收进未保存修改表（翻页不丢编辑；非法输入不收，留待保存时校验）
     foreach ($e in $DayBoxes.GetEnumerator()) {
-        if ($snap.ContainsKey($e.Key)) { $e.Value.Text = $snap[$e.Key] }
+        $t = $e.Value.Text.Trim()
+        if ($t -match '^\d+$') { $script:Overlay[$e.Key] = [int]$t }
     }
-    $script:SuppressEditEvent = $false
 }
 
 if ($haveData) {
@@ -550,8 +578,9 @@ else {
     $HintText.Text = $state.Reason + '。请先运行统计插件（pomodoro_stats_launcher）生成数据。'
     $HintText.Foreground = $conv.ConvertFromString('#D9534F')
     foreach ($b in $DayBoxes.Values) { $b.IsEnabled = $false }
+    $DayUp.IsEnabled = $false
+    $DayDown.IsEnabled = $false
 }
-$script:Snapshot = Get-Snapshot
 $script:SuppressEditEvent = $false
 
 # ---- 事件 ----
@@ -561,16 +590,11 @@ $TitleBar.Add_MouseLeftButtonDown({
 
 $CloseBtn.Add_Click({ $window.Close() })
 
-# 编辑任意数字后按钮才出现
-foreach ($b in $DayBoxes.Values) {
-    $b.Add_TextChanged({
-        if (-not $script:SuppressEditEvent) { $BtnRow.Visibility = 'Visible' }
-    })
-}
-
-# 取消：还原到最近一次保存的值，按钮收起
+# 取消：清除未保存修改，回到今天页，按钮收起
 $CancelBtn.Add_Click({
-    Apply-Snapshot $script:Snapshot
+    $script:Overlay.Clear()
+    $script:PageStart = $now.Date.AddDays(-6)
+    Build-DayRows
     $BtnRow.Visibility = 'Collapsed'
     $StatusText.Text = ''
 })
@@ -594,9 +618,10 @@ $SaveBtn.Add_Click({
     }
 
     try {
-        # 合并：仅替换近 7 天，其余历史日期原样保留
+        # 合并：当前页输入 + 翻页期间其他页的人工修改，其余历史日期原样保留
         $newDays = [hashtable]$days.Clone()
         foreach ($e in $vals.GetEnumerator()) { $newDays[$e.Key] = $e.Value }
+        foreach ($e in $script:Overlay.GetEnumerator()) { $newDays[$e.Key] = [int]$e.Value }
         # 累计 = 全部明细合计（与统计插件计数口径天然一致，杜绝手工改数后对不上）
         $newTotal = 0
         foreach ($v in $newDays.Values) { $newTotal += $v }
@@ -607,7 +632,8 @@ $SaveBtn.Add_Click({
         Update-Cards
         Update-Heatmap   # 热力图跟着校准结果刷新（用户实测：保存后格子不更新）
         Update-Trend     # V3：趋势折线同样跟着校准结果刷新
-        $script:Snapshot = Get-Snapshot
+        $script:Overlay.Clear()
+        Build-DayRows    # 用已保存值重建当前页
         $BtnRow.Visibility = 'Collapsed'
         $StatusText.Foreground = $conv.ConvertFromString('#2E9E63')
         $StatusText.Text = ('已保存。累计已按每日明细自动对账为 {0}。请手动重新运行统计插件（pomodoro_stats_launcher）使修改生效。' -f $newTotal)
@@ -1094,7 +1120,8 @@ if ($UiCheck) {
     foreach ($n in @('TitleBar','CloseBtn','TodayCard','WeekCard','MonthCard','TotalCard',
                      'HintText','DayRows','BtnRow','SaveBtn','CancelBtn','StatusText',
                      'HeatGrid','MainTabs','GranCombo','PeriodCombo','YearNav','YearPrev',
-                     'YearNext','YearLabel','TrendSummary','TrendCanvas')) {
+                     'YearNext','YearLabel','TrendSummary','TrendCanvas',
+                     'DayHeader','DayUp','DayDown')) {
         if ($null -eq $window.FindName($n)) { $missing += $n }
     }
     Write-Output ("UICHECK: OK heatmap_children={0} missing={1}" -f $probe.Children.Count, ($missing -join ','))

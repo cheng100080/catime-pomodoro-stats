@@ -382,6 +382,13 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
+  <!-- 小字号文本防锯齿：布局对齐设备像素 + Display 级字形栅格化。
+         否则半像素位置上的 ClearType 会在字形底部留下毛刺（用户实测） -->
+    <Style TargetType="TextBlock">
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+      <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
+    </Style>
   </Window.Resources>
   <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1">
     <StackPanel Margin="22,0,22,14">

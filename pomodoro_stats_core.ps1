@@ -554,15 +554,15 @@ function Refresh-Display {
         # 计时只保留标签：Catime 在 <catime></catime> 处渲染当前计时/时间，
         # 空闲时钟由 Catime 自己管理，插件不自写（避免与"当前时间"重复）。
         # 标签始终保留（缺了会被 Catime 杀掉）。
-        # 顺序必须是「先标签行、后图片行」：行高按字号计算，若图片在第一行，
-        # 图片（固定 38px 高）会溢出到第二行把时间文字压住（用户两次实测重叠）；
-        # 反过来文字只占字体行高，图片从下一行起，任何 PLUGIN_SCALE 都不重叠。
+        # 单行布局：Catime 窗口高 = 行数 × 行高，行高随 PLUGIN_SCALE 放大，
+        # 两行必然成为高矩形；图片与时间同行则窗口只有一行高（扁矩形），
+        # 统计图仍保持 PNG 绝对像素尺寸（不随缩放变）。
         $timerLine = '<catime></catime>'
         if ($img) {
-            Write-Display ("{0}`n<md>![{1}]({2}){3}</md>" -f $timerLine, $img, $script:StatsImgName, $zwsp)
+            Write-Display ("{0}<md>![{1}]({2}){3}</md>" -f $timerLine, $img, $script:StatsImgName, $zwsp)
         }
         else {
-            Write-Display ("{0}`n<md>###### {1}{2}</md>" -f $timerLine, $line, $zwsp)
+            Write-Display ("{0}<md>###### {1}{2}</md>" -f $timerLine, $line, $zwsp)
         }
     }
     else {

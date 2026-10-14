@@ -382,11 +382,13 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
-  <!-- 小字号文本防锯齿：布局对齐设备像素 + Display 级字形栅格化。
-         否则半像素位置上的 ClearType 会在字形底部留下毛刺（用户实测） -->
+  <!-- 小字号文本防锯齿：布局对齐设备像素 + 平滑字形渲染。
+         注意不能用 TextFormattingMode=Display：它把字形硬对齐到像素格，
+         曲线会出现阶梯状毛刺（用户实测）；半像素落点问题由根 Border 的
+         UseLayoutRounding 解决 -->
     <Style TargetType="TextBlock">
       <Setter Property="SnapsToDevicePixels" Value="True"/>
-      <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+      <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
       <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
     </Style>
   </Window.Resources>

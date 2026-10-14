@@ -390,7 +390,8 @@ $xaml = @'
       <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
     </Style>
   </Window.Resources>
-  <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1">
+  <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1"
+          UseLayoutRounding="True" SnapsToDevicePixels="True">
     <StackPanel Margin="22,0,22,14">
       <!-- 标题栏（可拖动） -->
       <Border x:Name="TitleBar" Background="Transparent" Margin="-22,0,-22,12" Padding="22,12">

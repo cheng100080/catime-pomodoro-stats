@@ -366,6 +366,22 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
+  <!-- 悬停提示：圆角白卡（去掉系统默认黄框与阴影），配合下方 SetInitialShowDelay=0 实现即现 -->
+    <Style TargetType="ToolTip">
+      <Setter Property="Foreground" Value="#2F2F2C"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="HasDropShadow" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToolTip">
+            <Border CornerRadius="6" Background="#FFFFFF" BorderBrush="#E3DFD6"
+                    BorderThickness="1" Padding="8,5">
+              <ContentPresenter/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
   <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1">
     <StackPanel Margin="22,0,22,14">
@@ -834,6 +850,9 @@ function Build-Heatmap {
                 $b.Opacity = 0.25 + 0.75 * ($count / $max)
                 $cell.Background = $b
                 $cell.ToolTip = ('{0} 周{1}：{2} 个' -f $d.ToString('MM-dd'), $wd[$r], $count)
+                # 悬停即时显示（系统默认延迟 500ms），且悬停期间不自动消失（默认 5s）
+                [System.Windows.Controls.ToolTipService]::SetInitialShowDelay($cell, 0)
+                [System.Windows.Controls.ToolTipService]::SetShowDuration($cell, 60000)
             }
             $cell.Margin = [System.Windows.Thickness]::new(1)
             # 格子中间写日期（日），淡灰半透明字体
@@ -1233,6 +1252,17 @@ if ($RenderTab -ge 0) {
 # 用户看不到弹窗"。UiCheck 把这段变成可确定性验证的检查（check_dashboard.py E10）。
 if ($UiCheck) {
     $probe = Build-Heatmap $days $now
+    # 取第一个带提示的格子（Grid 首个子元素是星期标签，不是格子）
+    $probeCell = $null
+    foreach ($ch in $probe.Children) {
+        if ($ch.ToolTip) { $probeCell = $ch; break }
+    }
+    $tipDelay = -1
+    $tipDur = -1
+    if ($probeCell) {
+        $tipDelay = [System.Windows.Controls.ToolTipService]::GetInitialShowDelay($probeCell)
+        $tipDur = [System.Windows.Controls.ToolTipService]::GetShowDuration($probeCell)
+    }
     $missing = @()
     foreach ($n in @('TitleBar','CloseBtn','TodayCard','WeekCard','MonthCard','TotalCard',
                      'HintText','DayRows','BtnRow','SaveBtn','CancelBtn','StatusText',
@@ -1241,7 +1271,8 @@ if ($UiCheck) {
                      'DayHeader','DayUp','DayDown')) {
         if ($null -eq $window.FindName($n)) { $missing += $n }
     }
-    Write-Output ("UICHECK: OK heatmap_children={0} missing={1}" -f $probe.Children.Count, ($missing -join ','))
+    Write-Output ("UICHECK: OK heatmap_children={0} missing={1} tip_delay={2} tip_dur={3}" -f `
+        $probe.Children.Count, ($missing -join ','), $tipDelay, $tipDur)
     exit 0
 }
 

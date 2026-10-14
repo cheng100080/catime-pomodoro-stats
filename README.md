@@ -31,7 +31,7 @@ $ShowTotal = $false   # 累计
 
 ![Catime 窗口显示效果](screenshots/catime_display.png)
 
-**显示面板**（三个标签页，下图为真实使用数据）：
+**显示面板**（三个标签页，下图为演示数据）：
 
 | 概览 | 热力图 |
 |---|---|

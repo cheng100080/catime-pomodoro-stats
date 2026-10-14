@@ -1,10 +1,19 @@
-# Catime 番茄钟统计插件（pomodoro_stats）
+# Catime 番茄钟插件：统计 + 显示面板
 
-在 Catime 窗口实时显示**今日 / 本周 / 累计**完成的番茄数，数据持久化，Catime 重启不丢失。
+两个零依赖的 Catime 插件（PowerShell 5.1 编写，只依赖 Windows 自带组件、不联网、不改 Catime 源码）：
+
+| 插件 | 作用 |
+|---|---|
+| **pomodoro_stats** | 在 Catime 窗口实时显示**今日 / 本周 /（本月）/（累计）**完成的番茄数，数据持久化，Catime 重启不丢失 |
+| **pomodoro-dashboard** | WPF 弹窗面板：统计总览、近 12 周热力图、趋势折线，可人工校准每日数量 |
+
+显示效果：Catime 窗口里**当前时间/倒计时**（由 Catime 自己渲染）后面跟着一行**统计图**：
 
 ```
-T3 W12  21:49       T = 今日   W = 本周(周一起算)   末尾是当前倒计时/时间
+21:49  T13 W55        T = 今日   W = 本周(周一起算)
 ```
+
+（统计行由插件渲染成图片，保持绝对像素大小，不随窗口缩放漂移；时间/倒计时由 Catime 在 `<catime>` 标签处渲染。）
 
 默认只显示**今日 + 本周**（本月与累计仍在后台记录）。想显示更多，改脚本顶部开关：
 
@@ -14,7 +23,21 @@ $ShowMonth = $false   # 本月
 $ShowTotal = $false   # 累计
 ```
 
-设成 `$true` 就会显示，例如全开时是 `T3 W12 M40 A57  21:49`。关掉的项**依然照常统计**，只是不显示。
+设成 `$true` 就会显示，例如全开时是 `21:49  T3 W12 M40 A57`。关掉的项**依然照常统计**，只是不显示。
+
+## 截图
+
+**统计插件**（Catime 窗口内；深色是桌面背景——Catime 窗口本身是透明的）：
+
+![Catime 窗口显示效果](screenshots/catime_display.png)
+
+**显示面板**（三个标签页，下图为真实使用数据）：
+
+| 概览 | 热力图 |
+|---|---|
+| ![概览](screenshots/dashboard_overview.png) | ![热力图](screenshots/dashboard_heatmap.png) |
+
+![趋势（月粒度）](screenshots/dashboard_trend.png)
 
 ## 计数口径（"1 个番茄"怎么算）
 
@@ -35,8 +58,8 @@ $ShowTotal = $false   # 累计
 
 | 值 | 效果 |
 |---|---|
-| `'timer'`（当前默认） | 推断"正在计时"时只显示计时，其余时间显示统计 |
-| `'both'` | 始终显示 `统计 + 计时`：番茄钟每一段、普通倒计时都能看到计时 |
+| `'both'`（代码默认） | 始终显示 `统计 + 计时`：番茄钟每一段、普通倒计时都能看到计时 |
+| `'timer'` | 推断"正在计时"时只显示计时，其余时间显示统计 |
 
 `'timer'` 想实现的是"番茄钟期间只显示计时、结束后自动回到统计"，但受一个**硬限制**：
 
@@ -161,6 +184,30 @@ $AnchorMarginY = 0
 
 ---
 
+## 显示面板（pomodoro_dashboard）
+
+统计插件只负责在窗口里显示一行数字；面板插件负责**查看与校准**。在 Catime 菜单点
+`pomodoro_dashboard_launcher.bat` 弹出一个 WPF 窗口，共三个标签页：
+
+| 标签页 | 内容 |
+|---|---|
+| **概览** | 今日 / 本周 / 本月 / 累计四张卡片 + 近 7 天每日数量（可编辑，↑↓ 翻页可校准更早日期） |
+| **热力图** | 近 12 周每日完成度格子（相对色阶，悬停查看具体数值） |
+| **趋势** | 平滑折线图，周(7 点) / 月(每日) / 年(5 年合计) 三种粒度，悬停查看数值 |
+
+设计要点：
+
+- **只有"近 7 天每日数"可编辑**，其余全部派生只读：累计 = 每日明细合计，本周(周一起算) /
+  本月(自然月) 现算——从根上避免"改了每日数、累计对不上"；
+- `version` / `phase` / `lastEvent` 字段原样保留、不可编辑（`phase` 被打乱会影响统计插件的
+  阶段索引判定）；
+- 保存走**原子写**（临时文件 + Move-Item），与统计插件同款；从 Catime 菜单启动面板时，
+  单插件槽位会自动停掉统计插件，天然无写冲突；
+- 保存成功后提示**手动重新运行统计插件**（Catime 同时只能运行一个插件，无法自动拉起）；
+- 浅色卡片风 UI，番茄图标为 TDesign tomato（MIT License）。
+
+---
+
 ## 安装
 
 1. 把这两个文件一起复制到 Catime 插件目录：
@@ -179,6 +226,15 @@ $AnchorMarginY = 0
 2. 托盘图标右键 → `插件` → 点击 **`pomodoro_stats_launcher.bat`** → 首次运行选 **「信任并运行」**。
 
 3. 窗口即显示统计数字。脚本顶部的 `$LabelToday / $LabelWeek / $LabelTotal` 可改显示标签。
+
+4. （可选）安装显示面板：把仓库里的 `pomodoro-dashboard/` **整个文件夹**复制进插件目录：
+
+   ```
+   %LOCALAPPDATA%\Catime\resources\plugins\pomodoro_dashboard\
+   ```
+
+   然后在 Catime 菜单点 `pomodoro_dashboard_launcher.bat`。面板读取统计插件同目录的
+   `pomodoro_stats.json`；若还没装统计插件，面板会提示"未找到统计数据"、编辑区禁用。
 
 > **前置条件：Catime 的通知类型必须是 `CATIME`（默认值）。**
 > 在 Catime 设置里：托盘右键 → `通知设置` → `通知方式` → 选 **「Catime通知窗口」**；
@@ -271,11 +327,11 @@ Catime 启动 `.ps1` 插件时执行的是 `powershell.exe -NoProfile ... -File 
 1. 确认通知类型为 `CATIME`（见上文前置条件）。
 2. 托盘图标**右键** → **`插件`** → 点击 **`pomodoro_stats_launcher.bat`** → 弹窗里选 **「信任并运行」**
    （菜单里还会有一个 `pomodoro_stats_core.ps1`，那是逻辑文件，**不要点它**）。
-   窗口应显示 `T0 W0 A0`（或已有数据）。
+   窗口应显示 `T0 W0`（或已有数据）。
 3. 快速触发一次"阶段完成"：**左键**单击托盘图标 → 在「倒计时」输入框输入 **`10s`** 回车
    （倒计时结束弹出的通知与番茄钟阶段完成时完全相同，会被计为 1 个工作阶段）。
    也可以走真实番茄钟，但默认阶段是 45 分钟，太久。
-4. 窗口数字应从 `T0 W0 A0` 变为 `T1 W1 A1`（休息阶段完成时数字不变）。
+4. 窗口数字应从 `T0 W0` 变为 `T1 W1`（休息阶段完成时数字不变）。
 
 ## 故障排查
 
@@ -293,14 +349,14 @@ Catime 启动 `.ps1` 插件时执行的是 `powershell.exe -NoProfile ... -File 
 
 | 项目 | 值 | 改在哪 |
 |---|---|---|
-| 插件显示缩放 | `PLUGIN_SCALE=4.00` | `config.ini [Display]` |
+| 插件显示缩放 | `PLUGIN_SCALE=4.72` | `config.ini [Display]` |
 | 插件窗口位置 | 插件运行时自动贴工作区右下角 | 脚本 `$PluginAnchor = 'bottomright'` |
 | 通知窗口大小 | `1600 × 350` | `config.ini [Notification]` |
 | 通知字号百分比 | `23`（≈80px，长消息完整显示） | 同上 `NOTIFICATION_FONT_SIZE` |
 | 通知位置 | `(940, 855)` = 插件窗口上方约 215px | 同上 `NOTIFICATION_WINDOW_X/Y` |
 | 计数口径 | `work`：每完成一个工作阶段计 1 个 | 脚本 `$CountUnit` |
 | 显示内容 | 今日 + 本周（本月/累计仅后台记录） | 脚本 `$ShowWeek/$ShowMonth/$ShowTotal` |
-| 显示模式 | `timer`：计时期间只显示计时，结束回统计 | 脚本 `$TimerDisplayMode` |
+| 显示模式 | `both`：始终显示统计 + 计时 | 脚本 `$TimerDisplayMode` |
 
 ## License
 

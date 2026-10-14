@@ -20,3 +20,5 @@ AGENTS.md
 
 # 运行期统计图片（Catime 锁定旧图，重启后自动清理）
 *.png
+# 但 README 引用的截图要入库
+!screenshots/*.png

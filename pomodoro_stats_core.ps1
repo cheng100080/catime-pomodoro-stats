@@ -463,11 +463,10 @@ function Update-StatsImage {
     param([string]$Text, $Cfg)
 
     if (-not $StatsAsImage) { return '' }
-    # 缩放必须参与缓存键：用户在插件模式缩放时钟时 Catime 会写回 PLUGIN_SCALE，
-    # 显示尺寸 = spec × 当前缩放。缩放一变就用新缩放重算 spec，
-    # 图片才能保持固定屏幕大小（$StatsImageScreenPx），不随时钟缩放漂移。
-    $key = ('{0}|{1}|{2}|{3}|{4}' -f $Text, $Cfg.FontFile, $Cfg.TextColor,
-                $StatsImageScreenPx, $Cfg.PluginScale)
+    # 缓存键不含 PluginScale：图片固定按 PNG 原始尺寸输出（缩放由显示端完成），
+    # 缩放变化不影响 PNG 像素，无需重绘（避免缩放拖动时产生大量遗留 png）。
+    $key = ('{0}|{1}|{2}|{3}' -f $Text, $Cfg.FontFile, $Cfg.TextColor,
+                $StatsImageScreenPx)
     if ($script:StatsImgKey -eq $key -and $script:StatsImgSize -and $script:StatsImgName -and
         (Test-Path -LiteralPath (Join-Path $ScriptDir $script:StatsImgName))) {
         return $script:StatsImgSize
@@ -504,14 +503,15 @@ function Update-StatsImage {
         return ''
     }
 
-    # Catime 会把图片按 PLUGIN_SCALE 放大，所以输出尺寸要除以它，才能 1:1 清晰显示
-    $sc = [double]$Cfg.PluginScale
-    if ($sc -le 0) { $sc = 1.0 }
+    # 图片跟随 PLUGIN_SCALE 缩放：spec 直接用 PNG 原始尺寸（显示尺寸 = spec × scale）。
+    # 若按旧逻辑除以 scale，图片显示尺寸恒定，而时钟文字与字体行高随 scale 变大，
+    # 缩放越大图片行里的空隙越大（用户实测"数字大了之后离得太远"）。
+    # 现在图片与时钟文字同步缩放，比例在任意 PLUGIN_SCALE 下保持一致。
     $spec = ''
     try {
         $wh = $size.Split('x')
-        $sw = [int][math]::Max(1, [math]::Round(([double]$wh[0]) / $sc))
-        $sh = [int][math]::Max(1, [math]::Round(([double]$wh[1]) / $sc))
+        $sw = [int][math]::Max(1, [math]::Round([double]$wh[0]))
+        $sh = [int][math]::Max(1, [math]::Round([double]$wh[1]))
         $spec = '{0}x{1}' -f $sw, $sh
     }
     catch { $spec = $size }

@@ -204,7 +204,7 @@ $xaml = @'
             <Border CornerRadius="6" Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
               <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
-                            VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                            VerticalAlignment="Center"/>
             </Border>
           </ControlTemplate>
         </Setter.Value>
@@ -611,14 +611,14 @@ $DayUp     = $window.FindName('DayUp')
 $DayDown   = $window.FindName('DayDown')
 $DayHeader = $window.FindName('DayHeader')
 $script:Overlay   = @{}                    # 未保存的人工修改（翻页不丢）
-$script:PageStart = $now.Date.AddDays(-6)  # 当前页首行日期（默认今天在最上）
+$script:PageStart = $now.Date             # 当前页首行日期（最新一天在最上，默认今天）
 
 function Build-DayRows {
     $DayRows.Children.Clear()
     $DayBoxes.Clear()
     $start = $script:PageStart
     for ($i = 0; $i -lt 7; $i++) {
-        $dt = $start.AddDays($i)
+        $dt = $start.AddDays(-$i)          # 最新一天在顶行，日期向下递减
         if ($dt -gt $now.Date) { break }    # 不显示未来日期
         $dk = $dt.ToString('yyyy-MM-dd')
         $c = 0
@@ -637,6 +637,19 @@ function Build-DayRows {
         $box.Add_TextChanged({
             if (-not $script:SuppressEditEvent) { $BtnRow.Visibility = 'Visible' }
         })
+        # 点击/ Tab 进入编辑时，光标默认落在数字最右端（追加改数更顺手）
+        $box.Add_GotFocus({
+            param($sender, $e)
+            $sender.CaretIndex = $sender.Text.Length
+        })
+        $box.Add_PreviewMouseLeftButtonDown({
+            param($sender, $e)
+            if (-not $sender.IsKeyboardFocusWithin) {
+                $sender.Focus()
+                $sender.CaretIndex = $sender.Text.Length
+                $e.Handled = $true   # 阻止默认的按点击坐标定位，保证光标在末端
+            }
+        })
         $DayBoxes[$dk] = $box
 
         $card = New-Object System.Windows.Controls.Border
@@ -650,14 +663,14 @@ function Build-DayRows {
         $DayRows.Children.Add($card) | Out-Null
     }
     # 页眉与翻页按钮状态
-    if ($start -eq $now.Date.AddDays(-6)) {
+    if ($start -eq $now.Date) {
         $DayHeader.Text = '近 7 天'
     }
     else {
-        $DayHeader.Text = ('更早 7 天（{0} ~ {1}）' -f $start.ToString('MM-dd'), $start.AddDays(6).ToString('MM-dd'))
+        $DayHeader.Text = ('更早 7 天（{0} ~ {1}）' -f $start.AddDays(-6).ToString('MM-dd'), $start.ToString('MM-dd'))
     }
-    $DayUp.IsEnabled = ($start -lt $now.Date.AddDays(-6))
-    $DayDown.IsEnabled = ($start -gt $now.Date.AddDays(-394))
+    $DayUp.IsEnabled = ($start -lt $now.Date)
+    $DayDown.IsEnabled = ($start -ge $now.Date.AddDays(-381))
 }
 Build-DayRows
 
@@ -705,22 +718,23 @@ $CloseBtn.Add_Click({ $window.Close() })
 # 取消：清除未保存修改，回到今天页，按钮收起
 $CancelBtn.Add_Click({
     $script:Overlay.Clear()
-    $script:PageStart = $now.Date.AddDays(-6)
+    $script:PageStart = $now.Date
     Build-DayRows
     $BtnRow.Visibility = 'Collapsed'
     $StatusText.Text = ''
 })
 
-# ↑↓ 翻页（先收当前页编辑，再换页重建）
+# ↑↓ 翻页（先收当前页编辑，再换页重建；↑=更新，↓=更早）
 $DayUp.Add_Click({
     Capture-VisibleEdits
-    $script:PageStart = $script:PageStart.AddDays(7)
+    $newStart = $script:PageStart.AddDays(7)
+    if ($newStart -le $now.Date) { $script:PageStart = $newStart }
     Build-DayRows
 })
 $DayDown.Add_Click({
     Capture-VisibleEdits
     $newStart = $script:PageStart.AddDays(-7)
-    if ($newStart -ge $now.Date.AddDays(-394)) { $script:PageStart = $newStart }
+    if ($newStart -ge $now.Date.AddDays(-388)) { $script:PageStart = $newStart }
     Build-DayRows
 })
 

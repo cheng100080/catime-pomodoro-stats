@@ -23,7 +23,7 @@
 #>
 
 #requires -version 5.1
-param([switch]$SelfTest, [switch]$UiCheck)
+param([switch]$SelfTest, [switch]$UiCheck, [int]$RenderTab = -1, [int]$RenderGran = -1)
 
 $ErrorActionPreference = 'Stop'
 
@@ -274,19 +274,6 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
-    <!-- TabControl 干净模板：去掉默认模板的选中连接铬边（它会把选中标签右边缘画成直线） -->
-    <Style x:Key="CleanTabControl" TargetType="TabControl">
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="TabControl">
-            <DockPanel Background="{TemplateBinding Background}">
-              <TabPanel DockPanel.Dock="Top" IsItemsHost="True" Background="Transparent"/>
-              <ContentPresenter ContentSource="SelectedContent"/>
-            </DockPanel>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
   </Window.Resources>
   <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1">
     <StackPanel Margin="22,0,22,14">
@@ -306,7 +293,7 @@ $xaml = @'
         </Grid>
       </Border>
       <!-- 标签页：概览 / 热力图（V2） -->
-      <TabControl x:Name="MainTabs" Style="{StaticResource CleanTabControl}" Margin="0,2,0,0">
+      <TabControl x:Name="MainTabs" Background="Transparent" BorderThickness="0" Margin="0,2,0,0">
         <TabItem Header="概览" Style="{StaticResource PillTab}">
         <StackPanel>
       <!-- 概览卡片 -->
@@ -447,6 +434,30 @@ $xaml = @'
             </StackPanel>
             <TextBlock Text="格子颜色越深表示当日完成越多；悬停可查看具体数值" Foreground="#B3AEA4"
                        FontSize="11" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+          </StackPanel>
+        </TabItem>
+        <TabItem Header="趋势" Style="{StaticResource PillTab}">
+          <StackPanel Margin="0,10,0,0">
+            <!-- 控制行：粒度 / 周期 / 年导航（年粒度时显示） -->
+            <StackPanel Orientation="Horizontal" Margin="2,0,0,8">
+              <ComboBox x:Name="GranCombo" Width="84" Height="28" FontSize="12"
+                        Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#2F2F2C"
+                        Padding="8,0,0,0" VerticalContentAlignment="Center"/>
+              <ComboBox x:Name="PeriodCombo" Width="160" Height="28" FontSize="12" Margin="8,0,0,0"
+                        Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#2F2F2C"
+                        Padding="8,0,0,0" VerticalContentAlignment="Center"/>
+              <StackPanel x:Name="YearNav" Orientation="Horizontal" Visibility="Collapsed"
+                          Margin="8,0,0,0" VerticalAlignment="Center">
+                <Button x:Name="YearPrev" Content="&#60;" Width="26" Height="26" FontSize="12"
+                        Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#55524B" Cursor="Hand"/>
+                <TextBlock x:Name="YearLabel" Text="" FontSize="12" Foreground="#2F2F2C"
+                           VerticalAlignment="Center" Margin="8,0"/>
+                <Button x:Name="YearNext" Content="&#62;" Width="26" Height="26" FontSize="12"
+                        Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#55524B" Cursor="Hand"/>
+              </StackPanel>
+            </StackPanel>
+            <TextBlock x:Name="TrendSummary" Text="" Foreground="#9A968C" FontSize="11" Margin="2,0,0,4"/>
+            <Canvas x:Name="TrendCanvas" Height="250" Background="Transparent"/>
           </StackPanel>
         </TabItem>
       </TabControl>
@@ -595,6 +606,7 @@ $SaveBtn.Add_Click({
 
         Update-Cards
         Update-Heatmap   # 热力图跟着校准结果刷新（用户实测：保存后格子不更新）
+        Update-Trend     # V3：趋势折线同样跟着校准结果刷新
         $script:Snapshot = Get-Snapshot
         $BtnRow.Visibility = 'Collapsed'
         $StatusText.Foreground = $conv.ConvertFromString('#2E9E63')
@@ -726,7 +738,354 @@ function Update-Heatmap {
 
 if ($haveData) { Update-Heatmap }
 
-# ---- 无头 UI 自检：解析 XAML + 查找命名控件 + 构建热力图，不显示窗口 ----
+# ---- 趋势标签页（V3：平滑折线，粒度 周/月/年，Canvas 自绘） ----
+$GranCombo    = $window.FindName('GranCombo')
+$PeriodCombo  = $window.FindName('PeriodCombo')
+$YearNav      = $window.FindName('YearNav')
+$YearPrev     = $window.FindName('YearPrev')
+$YearNext     = $window.FindName('YearNext')
+$YearLabel    = $window.FindName('YearLabel')
+$TrendSummary = $window.FindName('TrendSummary')
+$TrendCanvas  = $window.FindName('TrendCanvas')
+
+$script:TrendPoints   = @()    # 画布坐标点（悬停命中用）
+$script:HoverDot      = $null
+$script:TipBorder     = $null
+$script:YearWindowEnd = (Get-Date).Year
+$wdShort = @('一','二','三','四','五','六','日')
+
+# 粒度下拉项（周/月/年）
+foreach ($g in @('周','月','年')) {
+    $gi = New-Object System.Windows.Controls.ComboBoxItem
+    $gi.Content = $g
+    [void]$GranCombo.Items.Add($gi)
+}
+
+function Get-WeekTrend {
+    param([datetime]$AnyDay)
+    $ws = (Get-WeekStart $AnyDay)
+    $out = @()
+    for ($i = 0; $i -lt 7; $i++) {
+        $d = $ws.AddDays($i)
+        $k = $d.ToString('yyyy-MM-dd')
+        $v = 0
+        if ($days.ContainsKey($k)) { $v = $days[$k] }
+        $out += @{ Label = ('周' + $wdShort[(([int]$d.DayOfWeek) + 6) % 7]); Value = $v }
+    }
+    return $out
+}
+
+function Get-MonthTrend {
+    param([datetime]$AnyDay)
+    $cnt = [datetime]::DaysInMonth($AnyDay.Year, $AnyDay.Month)
+    $out = @()
+    for ($i = 1; $i -le $cnt; $i++) {
+        $d = Get-Date -Year $AnyDay.Year -Month $AnyDay.Month -Day $i
+        $k = $d.ToString('yyyy-MM-dd')
+        $v = 0
+        if ($days.ContainsKey($k)) { $v = $days[$k] }
+        $out += @{ Label = $d.ToString('MM-dd'); Value = $v }
+    }
+    return $out
+}
+
+function Get-YearTrend {
+    param([int]$EndYear)
+    $out = @()
+    for ($y = $EndYear - 4; $y -le $EndYear; $y++) {
+        $sum = 0
+        foreach ($k in $days.Keys) {
+            if ($k.StartsWith([string]$y + '-')) { $sum += $days[$k] }
+        }
+        $out += @{ Label = [string]$y; Value = $sum }
+    }
+    return $out
+}
+
+function Fill-PeriodCombo {
+    $PeriodCombo.Items.Clear()
+    $now = Get-Date
+    if ($GranCombo.SelectedIndex -eq 0) {
+        # 周：最近 12 周（含本周）
+        for ($i = 0; $i -lt 12; $i++) {
+            $ws = (Get-WeekStart $now).AddDays(-7 * $i)
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = ('{0} ~ {1}{2}' -f $ws.ToString('MM-dd'), $ws.AddDays(6).ToString('MM-dd'),
+                             $(if ($i -eq 0) { '（本周）' } else { '' }))
+            $item.Tag = $ws.ToString('yyyyMMdd')
+            [void]$PeriodCombo.Items.Add($item)
+        }
+    }
+    else {
+        # 月：最近 12 个月（含本月）
+        for ($i = 0; $i -lt 12; $i++) {
+            $m = $now.AddMonths(-$i)
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = $m.ToString('yyyy-MM')
+            $item.Tag = $m.ToString('yyyy-MM')
+            [void]$PeriodCombo.Items.Add($item)
+        }
+    }
+    $PeriodCombo.SelectedIndex = 0
+}
+
+function Get-CurrentSeries {
+    if ($GranCombo.SelectedIndex -eq 2) { return (Get-YearTrend $script:YearWindowEnd) }
+    $item = $PeriodCombo.SelectedItem
+    if ($null -eq $item) { return @() }
+    $tag = [string]$item.Tag
+    if ($GranCombo.SelectedIndex -eq 0) {
+        $d = [datetime]::ParseExact($tag, 'yyyyMMdd', $null)
+        return (Get-WeekTrend $d)
+    }
+    $d = [datetime]::ParseExact($tag + '-01', 'yyyy-MM-dd', $null)
+    return (Get-MonthTrend $d)
+}
+
+# Cardinal 样条插值段集合（每个 PathGeometry 需要独立段，不可共享）
+function New-SplineSegments {
+    param($Pts)
+    $segs = New-Object System.Windows.Media.PathSegmentCollection
+    $n = $Pts.Count
+    $tension = 0.5
+    for ($i = 0; $i -lt $n - 1; $i++) {
+        $p0 = if ($i -eq 0) { $Pts[0] } else { $Pts[$i - 1] }
+        $p1 = $Pts[$i]
+        $p2 = $Pts[$i + 1]
+        $p3 = if ($i + 2 -ge $n) { $Pts[$n - 1] } else { $Pts[$i + 2] }
+        $c1 = [System.Windows.Point]::new($p1.X + ($p2.X - $p0.X) / 6.0 * $tension,
+                                          $p1.Y + ($p2.Y - $p0.Y) / 6.0 * $tension)
+        $c2 = [System.Windows.Point]::new($p2.X - ($p3.X - $p1.X) / 6.0 * $tension,
+                                          $p2.Y - ($p3.Y - $p1.Y) / 6.0 * $tension)
+        [void]$segs.Add((New-Object System.Windows.Media.BezierSegment(
+            $c1, $c2, [System.Windows.Point]::new($p2.X, $p2.Y), $true)))
+    }
+    # -NoEnumerate：PathSegmentCollection 可枚举，直接 return 会被管道拆散成 Object[]
+    Write-Output -NoEnumerate $segs
+}
+
+function Update-Trend {
+    $series = Get-CurrentSeries
+    $TrendCanvas.Children.Clear()
+    $script:TrendPoints = @()
+    $n = $series.Count
+    if ($n -eq 0) {
+        $TrendSummary.Text = '暂无数据'
+        return
+    }
+
+    $CW = 456.0; $CH = 250.0
+    $padL = 30.0; $padR = 10.0; $padT = 12.0; $padB = 24.0
+    $plotW = $CW - $padL - $padR
+    $plotH = $CH - $padT - $padB
+    $maxV = 1.0
+    foreach ($s in $series) { if ([double]$s.Value -gt $maxV) { $maxV = [double]$s.Value } }
+
+    $convT     = [System.Windows.Media.BrushConverter]::new()
+    $gridBrush = $convT.ConvertFromString('#EFEDE8')
+    $labelBr   = $convT.ConvertFromString('#9A968C')
+    $accentBr  = $convT.ConvertFromString('#66A6FF')
+
+    # 横向网格 + Y 轴标签（4 档）
+    for ($g = 0; $g -le 3; $g++) {
+        $y = $padT + $plotH * $g / 3.0
+        $ln = New-Object System.Windows.Shapes.Line
+        $ln.X1 = $padL; $ln.Y1 = $y; $ln.X2 = $CW - $padR; $ln.Y2 = $y
+        $ln.Stroke = $gridBrush; $ln.StrokeThickness = 1
+        [void]$TrendCanvas.Children.Add($ln)
+        $lb = New-Object System.Windows.Controls.TextBlock
+        $lb.Text = [string][int][math]::Round($maxV * (3 - $g) / 3.0)
+        $lb.FontSize = 9; $lb.Foreground = $labelBr
+        $lb.Width = 24; $lb.TextAlignment = 'Right'
+        [System.Windows.Controls.Canvas]::SetLeft($lb, 0)
+        [System.Windows.Controls.Canvas]::SetTop($lb, $y - 7)
+        [void]$TrendCanvas.Children.Add($lb)
+    }
+
+    # 数据点坐标
+    for ($i = 0; $i -lt $n; $i++) {
+        $x = $padL + $(if ($n -eq 1) { $plotW / 2.0 } else { $plotW * $i / ($n - 1) })
+        $y = $padT + $plotH * (1.0 - ([double]$series[$i].Value / $maxV))
+        $script:TrendPoints += @{ X = $x; Y = $y; Label = $series[$i].Label; Value = $series[$i].Value }
+    }
+
+    # 面积填充（曲线闭合到底部，淡 accent 8%）
+    $figFill = New-Object System.Windows.Media.PathFigure
+    $figFill.StartPoint = [System.Windows.Point]::new($script:TrendPoints[0].X, $script:TrendPoints[0].Y)
+    $figFill.Segments = (New-SplineSegments $script:TrendPoints)
+    $bottomY = $padT + $plotH
+    [void]$figFill.Segments.Add((New-Object System.Windows.Media.LineSegment(
+        [System.Windows.Point]::new($script:TrendPoints[$n - 1].X, $bottomY), $true)))
+    [void]$figFill.Segments.Add((New-Object System.Windows.Media.LineSegment(
+        [System.Windows.Point]::new($script:TrendPoints[0].X, $bottomY), $true)))
+    $geoFill = New-Object System.Windows.Media.PathGeometry
+    [void]$geoFill.Figures.Add($figFill)
+    $area = New-Object System.Windows.Shapes.Path
+    $area.Data = $geoFill
+    $area.Stroke = $null
+    $fillBr = [System.Windows.Media.SolidColorBrush]::new()
+    $fillBr.Color = [System.Windows.Media.Color]::FromArgb(20, 0x66, 0xA6, 0xFF)
+    $area.Fill = $fillBr
+    [void]$TrendCanvas.Children.Add($area)
+
+    # 平滑曲线（accent 渐变描边）
+    $fig = New-Object System.Windows.Media.PathFigure
+    $fig.StartPoint = $figFill.StartPoint
+    $fig.Segments = (New-SplineSegments $script:TrendPoints)
+    $geo = New-Object System.Windows.Media.PathGeometry
+    [void]$geo.Figures.Add($fig)
+    $line = New-Object System.Windows.Shapes.Path
+    $line.Data = $geo
+    $line.StrokeThickness = 2.5
+    $line.StrokeLineJoin = 'Round'
+    $line.StrokeStartLineCap = 'Round'
+    $line.StrokeEndLineCap = 'Round'
+    $grad = New-Object System.Windows.Media.LinearGradientBrush
+    $grad.StartPoint = '0,0'; $grad.EndPoint = '1,0'
+    [void]$grad.GradientStops.Add((New-Object System.Windows.Media.GradientStop(
+        [System.Windows.Media.Color]::FromRgb(0x89, 0xF7, 0xFE), 0.0)))
+    [void]$grad.GradientStops.Add((New-Object System.Windows.Media.GradientStop(
+        [System.Windows.Media.Color]::FromRgb(0x66, 0xA6, 0xFF), 1.0)))
+    $line.Stroke = $grad
+    [void]$TrendCanvas.Children.Add($line)
+
+    # 数据圆点（白心 accent 边）
+    foreach ($p in $script:TrendPoints) {
+        $dot = New-Object System.Windows.Shapes.Ellipse
+        $dot.Width = 5; $dot.Height = 5
+        $dot.Fill = [System.Windows.Media.Brushes]::White
+        $dot.Stroke = $accentBr; $dot.StrokeThickness = 1.5
+        [System.Windows.Controls.Canvas]::SetLeft($dot, $p.X - 2.5)
+        [System.Windows.Controls.Canvas]::SetTop($dot, $p.Y - 2.5)
+        [void]$TrendCanvas.Children.Add($dot)
+    }
+
+    # X 轴标签（月视图抽样约 7 个，周/年全显）
+    $step = 1
+    if ($GranCombo.SelectedIndex -eq 1) { $step = [int][math]::Ceiling($n / 7.0) }
+    for ($i = 0; $i -lt $n; $i += $step) {
+        $lb = New-Object System.Windows.Controls.TextBlock
+        $lb.Text = $series[$i].Label
+        $lb.FontSize = 9; $lb.Foreground = $labelBr
+        $lb.Width = 44; $lb.TextAlignment = 'Center'
+        [System.Windows.Controls.Canvas]::SetLeft($lb, $script:TrendPoints[$i].X - 22)
+        [System.Windows.Controls.Canvas]::SetTop($lb, $padT + $plotH + 6)
+        [void]$TrendCanvas.Children.Add($lb)
+    }
+
+    # 悬停高亮点 + 提示卡（画布内元素，避免 Popup 抢鼠标）
+    $hover = New-Object System.Windows.Shapes.Ellipse
+    $hover.Width = 9; $hover.Height = 9
+    $hover.Fill = $accentBr
+    $hover.Visibility = 'Collapsed'
+    [void]$TrendCanvas.Children.Add($hover)
+    $script:HoverDot = $hover
+
+    $tip = New-Object System.Windows.Controls.Border
+    $tip.Background = [System.Windows.Media.Brushes]::White
+    $tip.BorderBrush = $convT.ConvertFromString('#ECE8E0')
+    $tip.BorderThickness = [System.Windows.Thickness]::new(1)
+    $tip.CornerRadius = [System.Windows.CornerRadius]::new(6)
+    $tip.Padding = [System.Windows.Thickness]::new(7, 4, 7, 4)
+    $tip.Visibility = 'Collapsed'
+    $tipTxt = New-Object System.Windows.Controls.TextBlock
+    $tipTxt.FontSize = 11; $tipTxt.Foreground = $convT.ConvertFromString('#2F2F2C')
+    $tip.Child = $tipTxt
+    [void]$TrendCanvas.Children.Add($tip)
+    $script:TipBorder = $tip
+    $script:TipText = $tipTxt
+
+    # 汇总行
+    $sum = 0
+    foreach ($s in $series) { $sum += [int]$s.Value }
+    $avgLabel = if ($GranCombo.SelectedIndex -eq 2) { '年均' } else { '日均' }
+    $TrendSummary.Text = ('区间共 {0} 个 · {1} {2} 个' -f $sum, $avgLabel, [math]::Round($sum / $n, 1))
+}
+
+# 悬停命中：按 X 距离找最近点
+$TrendCanvas.Add_MouseMove({
+    if ($script:TrendPoints.Count -eq 0 -or $null -eq $script:HoverDot) { return }
+    $pos = [System.Windows.Input.Mouse]::GetPosition($TrendCanvas)
+    $best = $null
+    $bestD = [double]::MaxValue
+    foreach ($p in $script:TrendPoints) {
+        $d = [math]::Abs($p.X - $pos.X)
+        if ($d -lt $bestD) { $bestD = $d; $best = $p }
+    }
+    if ($null -ne $best) {
+        [System.Windows.Controls.Canvas]::SetLeft($script:HoverDot, $best.X - 4.5)
+        [System.Windows.Controls.Canvas]::SetTop($script:HoverDot, $best.Y - 4.5)
+        $script:HoverDot.Visibility = 'Visible'
+        $script:TipText.Text = ('{0}：{1} 个' -f $best.Label, $best.Value)
+        $tx = $best.X - 30
+        if ($tx -lt 0) { $tx = 0 }
+        if ($tx -gt 320) { $tx = 320 }
+        [System.Windows.Controls.Canvas]::SetLeft($script:TipBorder, $tx)
+        [System.Windows.Controls.Canvas]::SetTop($script:TipBorder, $best.Y - 38)
+        $script:TipBorder.Visibility = 'Visible'
+    }
+})
+$TrendCanvas.Add_MouseLeave({
+    if ($null -ne $script:HoverDot) { $script:HoverDot.Visibility = 'Collapsed' }
+    if ($null -ne $script:TipBorder) { $script:TipBorder.Visibility = 'Collapsed' }
+})
+
+# 年导航
+$YearPrev.Add_Click({
+    $script:YearWindowEnd--
+    $YearLabel.Text = ('{0} - {1}' -f ($script:YearWindowEnd - 4), $script:YearWindowEnd)
+    Update-Trend
+})
+$YearNext.Add_Click({
+    $script:YearWindowEnd++
+    $YearLabel.Text = ('{0} - {1}' -f ($script:YearWindowEnd - 4), $script:YearWindowEnd)
+    Update-Trend
+})
+
+# 粒度切换：重建周期下拉 / 显隐年导航 / 重画
+$GranCombo.Add_SelectionChanged({
+    $isYear = ($GranCombo.SelectedIndex -eq 2)
+    $PeriodCombo.Visibility = $(if ($isYear) { 'Collapsed' } else { 'Visible' })
+    $YearNav.Visibility = $(if ($isYear) { 'Visible' } else { 'Collapsed' })
+    if ($isYear) {
+        $YearLabel.Text = ('{0} - {1}' -f ($script:YearWindowEnd - 4), $script:YearWindowEnd)
+    }
+    else {
+        Fill-PeriodCombo
+    }
+    Update-Trend
+})
+
+# 初始：选"周"触发 SelectionChanged → 填周期下拉 + 画当前周
+$GranCombo.SelectedIndex = 0
+
+# ---- 视觉回归测试模式：跑完整代码 + 切标签 + 渲染存图，不弹窗 ----
+# 用法：-RenderTab 0|1|2 [-RenderGran 0|1|2]，输出到 $env:TEMP
+if ($RenderTab -ge 0) {
+    if ($RenderGran -ge 0 -and $RenderGran -le 2) { $GranCombo.SelectedIndex = $RenderGran }
+    $tabsCtrl = $window.FindName('MainTabs')
+    $tabsCtrl.SelectedIndex = $RenderTab
+    $c2 = $window.Content
+    # 按窗口实际宽度 520 强制排列（否则内容按自然宽度收窄，画布右侧被裁）
+    $c2.Measure([System.Windows.Size]::new(520, 1000))
+    $hh = [math]::Max($c2.DesiredSize.Height, 420)
+    $c2.Arrange([System.Windows.Rect]::new(0, 0, 520, $hh))
+    $c2.UpdateLayout()
+    $sc2 = 2.0
+    $w2 = 1040
+    $h2 = [int][math]::Ceiling($hh * $sc2)
+    $bm2 = New-Object System.Windows.Media.Imaging.RenderTargetBitmap($w2, $h2, 192.0, 192.0, [System.Windows.Media.PixelFormats]::Pbgra32)
+    $bm2.Render($c2)
+    $enc2 = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+    $enc2.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bm2))
+    $out2 = Join-Path $env:TEMP ('dash_render_tab{0}_g{1}.png' -f $RenderTab, $(if ($RenderGran -ge 0) { $RenderGran } else { -1 }))
+    $fs2 = [System.IO.File]::Create($out2)
+    $enc2.Save($fs2); $fs2.Close()
+    Write-Output ("RENDERED: $out2")
+    exit 0
+}
+
+# 无头 UI 自检：解析 XAML + 查找命名控件 + 构建热力图，不显示窗口 ----
 # 用途：SelfTest 覆盖不了 XAML/热力图构建，此前该段一旦报错只会"进程静默死亡、
 # 用户看不到弹窗"。UiCheck 把这段变成可确定性验证的检查（check_dashboard.py E10）。
 if ($UiCheck) {
@@ -734,7 +1093,8 @@ if ($UiCheck) {
     $missing = @()
     foreach ($n in @('TitleBar','CloseBtn','TodayCard','WeekCard','MonthCard','TotalCard',
                      'HintText','DayRows','BtnRow','SaveBtn','CancelBtn','StatusText',
-                     'HeatGrid','MainTabs')) {
+                     'HeatGrid','MainTabs','GranCombo','PeriodCombo','YearNav','YearPrev',
+                     'YearNext','YearLabel','TrendSummary','TrendCanvas')) {
         if ($null -eq $window.FindName($n)) { $missing += $n }
     }
     Write-Output ("UICHECK: OK heatmap_children={0} missing={1}" -f $probe.Children.Count, ($missing -join ','))

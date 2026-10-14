@@ -550,16 +550,18 @@ function Refresh-Display {
     if ($DisplayLayout -eq 'stacked') {
         # 优先用图片渲染统计行（可任意小、行距可贴近）；失败则回退到 markdown 标题分级
         $img = Update-StatsImage $line $cfg
-        $zwsp = [string][char]0x200B   # 零宽空格：不可见，但能让"图片行"成为独立一行
-        # 计时行只保留标签：Catime 在 <catime></catime> 处渲染当前计时/时间，
+        $zwsp = [string][char]0x200B   # 零宽空格：分隔图片与后续内容（不可见）
+        # 计时只保留标签：Catime 在 <catime></catime> 处渲染当前计时/时间，
         # 空闲时钟由 Catime 自己管理，插件不自写（避免与"当前时间"重复）。
         # 标签始终保留（缺了会被 Catime 杀掉）。
+        # 图片与标签必须**同一行**：分行时第二行行高仅按字号算（20px），
+        # 而图片高 38px，会把时间文字压在图片上（用户实测重叠）。
         $timerLine = '<catime></catime>'
         if ($img) {
-            Write-Display ("<md>![{0}]({1}){2}</md>`n{3}" -f $img, $script:StatsImgName, $zwsp, $timerLine)
+            Write-Display ("<md>![{0}]({1}){2}</md>{3}" -f $img, $script:StatsImgName, $zwsp, $timerLine)
         }
         else {
-            Write-Display ("<md>###### {0}{1}</md>`n{2}" -f $line, $zwsp, $timerLine)
+            Write-Display ("<md>###### {0}{1}</md>{2}" -f $line, $zwsp, $timerLine)
         }
     }
     else {

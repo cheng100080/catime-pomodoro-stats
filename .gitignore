@@ -13,3 +13,10 @@ pomodoro_stats.json
 # 临时测试脚本与结果（保留在本地，不入库）
 _tmp/
 pomodoro_stats.log
+
+# 本地工作笔记（保留在本地，不进公开仓库；要点已整合进 DEVELOPMENT.md）
+Development/
+AGENTS.md
+
+# 运行期统计图片（Catime 锁定旧图，重启后自动清理）
+*.png

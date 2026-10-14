@@ -198,6 +198,79 @@ $xaml = @'
       <Setter Property="VerticalContentAlignment" Value="Center"/>
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="Padding" Value="4,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border CornerRadius="6" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                            VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="IconBtn" TargetType="Button">
+      <Setter Property="Background" Value="#FFFFFF"/>
+      <Setter Property="Foreground" Value="#55524B"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Width" Value="26"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border CornerRadius="6" Background="{TemplateBinding Background}"
+                    BorderBrush="#E3DFD6" BorderThickness="1">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="LightCombo" TargetType="ComboBox">
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Background" Value="#FFFFFF"/>
+      <Setter Property="Foreground" Value="#2F2F2C"/>
+      <Setter Property="Padding" Value="10,0,26,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <Border x:Name="ComboBg" CornerRadius="6" Background="{TemplateBinding Background}"
+                      BorderBrush="#E3DFD6" BorderThickness="1"/>
+              <ToggleButton x:Name="ComboArrow" Focusable="False"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
+                                        RelativeSource={RelativeSource TemplatedParent}}"
+                            HorizontalAlignment="Right" Width="24">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="Transparent">
+                      <Path Data="M 0 0 L 4 4.5 L 8 0 Z" Fill="#8A8578"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <ContentPresenter x:Name="ComboText" IsHitTestVisible="False"
+                                Content="{TemplateBinding SelectionBoxItem}"
+                                Margin="{TemplateBinding Padding}"/>
+              <Popup x:Name="ComboPopup" Placement="Bottom" AllowsTransparency="True"
+                     Focusable="False" PopupAnimation="Slide"
+                     IsOpen="{TemplateBinding IsDropDownOpen}">
+                <Border CornerRadius="6" Background="#FFFFFF" BorderBrush="#E3DFD6"
+                        BorderThickness="1" MaxHeight="220" Margin="0,2,0,0">
+                  <ScrollViewer>
+                    <ItemsPresenter/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
     <Style x:Key="DayLabel" TargetType="TextBlock">
       <Setter Property="Foreground" Value="#55524B"/>
@@ -274,6 +347,24 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- TabControl 干净模板：去掉默认模板的选中连接铬边（它把选中标签右边缘画成
+         直线），保留标签条与内容区间距，观感贴近默认布局 -->
+    <Style x:Key="CleanTabControl" TargetType="TabControl">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabControl">
+            <Grid Background="{TemplateBinding Background}">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+              <TabPanel Grid.Row="0" IsItemsHost="True" Background="Transparent" Margin="0,0,0,10"/>
+              <ContentPresenter Grid.Row="1" ContentSource="SelectedContent"/>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
   <Border CornerRadius="12" Background="#F7F5F0" BorderBrush="#E7E2D9" BorderThickness="1">
     <StackPanel Margin="22,0,22,14">
@@ -293,7 +384,7 @@ $xaml = @'
         </Grid>
       </Border>
       <!-- 标签页：概览 / 热力图（V2） -->
-      <TabControl x:Name="MainTabs" Background="Transparent" BorderThickness="0" Margin="0,2,0,0">
+      <TabControl x:Name="MainTabs" Style="{StaticResource CleanTabControl}" Margin="0,2,0,0">
         <TabItem Header="概览" Style="{StaticResource PillTab}">
         <StackPanel>
       <!-- 概览卡片 -->
@@ -400,11 +491,9 @@ $xaml = @'
         <TextBlock x:Name="DayHeader" Text="近 7 天" Foreground="#2F2F2C" FontSize="13"
                    FontWeight="Bold" VerticalAlignment="Center"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-          <Button x:Name="DayUp" Content="&#8593;" Width="26" Height="22" FontSize="11"
-                  Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#55524B" Cursor="Hand"
+          <Button x:Name="DayUp" Content="&#8593;" Style="{StaticResource IconBtn}"
                   Margin="0,0,4,0"/>
-          <Button x:Name="DayDown" Content="&#8595;" Width="26" Height="22" FontSize="11"
-                  Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#55524B" Cursor="Hand"/>
+          <Button x:Name="DayDown" Content="&#8595;" Style="{StaticResource IconBtn}"/>
         </StackPanel>
       </Grid>
       <StackPanel x:Name="DayRows"/>
@@ -449,20 +538,15 @@ $xaml = @'
           <StackPanel Margin="0,10,0,0">
             <!-- 控制行：粒度 / 周期 / 年导航（年粒度时显示） -->
             <StackPanel Orientation="Horizontal" Margin="2,0,0,8">
-              <ComboBox x:Name="GranCombo" Width="84" Height="28" FontSize="12"
-                        Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#2F2F2C"
-                        Padding="8,0,0,0" VerticalContentAlignment="Center"/>
-              <ComboBox x:Name="PeriodCombo" Width="160" Height="28" FontSize="12" Margin="8,0,0,0"
-                        Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#2F2F2C"
-                        Padding="8,0,0,0" VerticalContentAlignment="Center"/>
+              <ComboBox x:Name="GranCombo" Width="84" Style="{StaticResource LightCombo}"/>
+              <ComboBox x:Name="PeriodCombo" Width="160" Margin="8,0,0,0"
+                        Style="{StaticResource LightCombo}"/>
               <StackPanel x:Name="YearNav" Orientation="Horizontal" Visibility="Collapsed"
                           Margin="8,0,0,0" VerticalAlignment="Center">
-                <Button x:Name="YearPrev" Content="&#60;" Width="26" Height="26" FontSize="12"
-                        Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#55524B" Cursor="Hand"/>
+                <Button x:Name="YearPrev" Content="&#60;" Style="{StaticResource IconBtn}"/>
                 <TextBlock x:Name="YearLabel" Text="" FontSize="12" Foreground="#2F2F2C"
                            VerticalAlignment="Center" Margin="8,0"/>
-                <Button x:Name="YearNext" Content="&#62;" Width="26" Height="26" FontSize="12"
-                        Background="#FFFFFF" BorderBrush="#E3DFD6" Foreground="#55524B" Cursor="Hand"/>
+                <Button x:Name="YearNext" Content="&#62;" Style="{StaticResource IconBtn}"/>
               </StackPanel>
             </StackPanel>
             <TextBlock x:Name="TrendSummary" Text="" Foreground="#9A968C" FontSize="11" Margin="2,0,0,4"/>
@@ -597,6 +681,19 @@ $CancelBtn.Add_Click({
     Build-DayRows
     $BtnRow.Visibility = 'Collapsed'
     $StatusText.Text = ''
+})
+
+# ↑↓ 翻页（先收当前页编辑，再换页重建）
+$DayUp.Add_Click({
+    Capture-VisibleEdits
+    $script:PageStart = $script:PageStart.AddDays(7)
+    Build-DayRows
+})
+$DayDown.Add_Click({
+    Capture-VisibleEdits
+    $newStart = $script:PageStart.AddDays(-7)
+    if ($newStart -ge $now.Date.AddDays(-394)) { $script:PageStart = $newStart }
+    Build-DayRows
 })
 
 $SaveBtn.Add_Click({
@@ -1097,8 +1194,8 @@ if ($RenderTab -ge 0) {
     $hh = [math]::Max($c2.DesiredSize.Height, 420)
     $c2.Arrange([System.Windows.Rect]::new(0, 0, 520, $hh))
     $c2.UpdateLayout()
-    $sc2 = 2.0
-    $w2 = 1040
+    $sc2 = 3.0
+    $w2 = 1560
     $h2 = [int][math]::Ceiling($hh * $sc2)
     $bm2 = New-Object System.Windows.Media.Imaging.RenderTargetBitmap($w2, $h2, 192.0, 192.0, [System.Windows.Media.PixelFormats]::Pbgra32)
     $bm2.Render($c2)
@@ -1107,6 +1204,16 @@ if ($RenderTab -ge 0) {
     $out2 = Join-Path $env:TEMP ('dash_render_tab{0}_g{1}.png' -f $RenderTab, $(if ($RenderGran -ge 0) { $RenderGran } else { -1 }))
     $fs2 = [System.IO.File]::Create($out2)
     $enc2.Save($fs2); $fs2.Close()
+    # 附带裁剪标签条区域（验证圆角）
+    try {
+        $cr = New-Object System.Windows.Int32Rect(50, 170, 720, 150)
+        $crBmp = New-Object System.Windows.Media.Imaging.CroppedBitmap($bm2, $cr)
+        $enc3 = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+        $enc3.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($crBmp))
+        $out3 = Join-Path $env:TEMP ('dash_render_tab{0}_g{1}_strip.png' -f $RenderTab, $(if ($RenderGran -ge 0) { $RenderGran } else { -1 }))
+        $fs3 = [System.IO.File]::Create($out3)
+        $enc3.Save($fs3); $fs3.Close()
+    } catch { }
     Write-Output ("RENDERED: $out2")
     exit 0
 }

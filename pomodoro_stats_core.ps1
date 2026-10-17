@@ -47,6 +47,13 @@ $ShowWeek  = $true
 $ShowMonth = $false
 $ShowTotal = $false
 
+# 阶段进度显示（如 2/4 = 正在第 2 段 / 共 4 段）：
+#   $true  = 有阶段正在计时时，在统计行末尾显示进度；
+#            空闲、整轮跑完、插件刚启动时不显示
+#   ⚠ 硬限制：Catime 开始番茄钟不产生任何外部信号（不弹通知、不建窗口、无 IPC），
+#     每轮第 1 段进行中无法显示——第 1 段完成后进度才出现（2/4 → 3/4 → 4/4）
+$ShowPhaseProgress = $true
+
 # 插件模式的窗口位置（可选；只影响插件运行时，不会改动你正常时间的位置设置）
 #   'keep'        = 不动窗口（与正常时间共用 Catime 的位置）
 #   'bottomright' = 贴工作区右下角（自动避开任务栏）
@@ -107,7 +114,7 @@ $PhaseTypes = ''
 $PollMs = 500
 
 # 插件版本号（写入启动日志，便于确认运行的代码版本）
-$PluginVersion = 'v0.19'
+$PluginVersion = 'v0.20'
 
 # Catime 通知弹窗的窗口类名（源码 resource_ui_ids.h 定义，请勿改动）
 $ToastClass = 'CatimeNotificationClass'
@@ -251,11 +258,12 @@ private static bool TryParseHexColor(string spec, int idx, out System.Drawing.Co
 function Read-CatimeConfig {
     <#
       读取 Catime config.ini，返回:
-        @{ Type = 'CATIME'|'OS'|'SYSTEM_MODAL'; Pattern = @(工作秒,休息秒,...) }
+        @{ Type = 'CATIME'|'OS'|'SYSTEM_MODAL'; Pattern = @(工作秒,休息秒,...);
+           Version = [version]（[General] CONFIG_VERSION，读不到为 $null） }
       读取失败时返回默认值（与 Catime 内置默认一致）。
     #>
     $result = @{ Type = 'CATIME'; Pattern = @(1500, 300, 1500, 600); LoopCount = 1
-                 FontFile = ''; TextColor = ''; PluginScale = 1.0 }
+                 FontFile = ''; TextColor = ''; PluginScale = 1.0; Version = $null }
     if (-not $ConfigFile) { return $result }
     try {
         $section = ''
@@ -270,7 +278,13 @@ function Read-CatimeConfig {
             if ($eq -lt 1) { continue }
             $key = $t.Substring(0, $eq).Trim()
             $val = $t.Substring($eq + 1).Trim()
-            if ($section -eq 'Notification' -and $key -eq 'NOTIFICATION_TYPE' -and $val) {
+            if ($section -eq 'General' -and $key -eq 'CONFIG_VERSION' -and $val) {
+                # Catime 版本号：v1.6.x 独有特性（如 <notify> 标签）据此门禁，
+                # 避免低版本 Catime 把新标签当普通文字显示
+                $v = $null
+                if ([version]::TryParse($val, [ref]$v)) { $result.Version = $v }
+            }
+            elseif ($section -eq 'Notification' -and $key -eq 'NOTIFICATION_TYPE' -and $val) {
                 $result.Type = $val.ToUpper()
             }
             elseif ($section -eq 'Display' -and $key -eq 'FONT_FILE_NAME' -and $val) {
@@ -458,6 +472,28 @@ function Write-Log {
 # 该标签处会渲染当前计时/时间，因此插件模式下也能看到倒计时。
 $CatimeTag = '  <catime></catime>'
 
+function Test-PhaseRunning {
+    <# 推断"当前正有一个阶段在计时"。
+       $script:TimerEndsAt 由 Invoke-PhaseComplete 维护：阶段完成时设为下一段预期结束时刻，
+       整轮跑完/会话结束时置 $null；手动停表或暂停超时后自然过期。
+       注意：Catime 不提供"计时开始"信号，番茄钟第 1 段进行中此值为 $null（无法显示）。 #>
+    return ($script:TimerEndsAt -ne $null) -and ((Get-Date) -lt $script:TimerEndsAt)
+}
+
+function Get-PhaseProgressText {
+    <# 返回阶段进度文本，如 "2/4"（正在第 2 段 / 共 4 段）。
+       只有一段时返回 ''（"1/1" 无意义）。 #>
+    param($State, $Pattern)
+
+    $n = 0
+    if ($Pattern) { $n = $Pattern.Count }
+    if ($n -le 1) { return '' }
+
+    $idx = 0
+    if ($State -ne $null) { $idx = [int]$State.phase }
+    return ('{0}/{1}' -f (($idx % $n) + 1), $n)
+}
+
 function Update-StatsImage {
     <# 把统计行渲染成 PNG；内容/字体/配色未变时复用上次结果（不重复绘制） #>
     param([string]$Text, $Cfg)
@@ -546,6 +582,13 @@ function Refresh-Display {
     if ($ShowMonth) { $parts += ('{0}{1}' -f $LabelMonth, $mo) }
     if ($ShowTotal) { $parts += ('{0}{1}' -f $LabelTotal, $State.total) }
     $line = $parts -join ' '
+
+    # 阶段进度（如 2/4）：仅在有阶段正在计时时追加到统计行末尾；
+    # 图片模式与文字回退模式都走 $line，一处改动两者全覆盖
+    if ($ShowPhaseProgress -and (Test-PhaseRunning)) {
+        $prog = Get-PhaseProgressText $State $cfg.Pattern
+        if ($prog) { $line = ('{0} {1}' -f $line, $prog) }
+    }
 
     if ($DisplayLayout -eq 'stacked') {
         # 优先用图片渲染统计行（可任意小、行距可贴近）；失败则回退到 markdown 标题分级
@@ -638,8 +681,12 @@ function Invoke-PhaseComplete {
         $script:TimerEndsAt = $now.AddSeconds($Pattern[($idx + 1) % $n])
     }
 
+    # 进度可见性可能随本次完成事件变化（出现/消失/换段），同步标志避免主循环紧接着重复刷新
+    $script:ProgressShown = (Test-PhaseRunning)
+
     Save-State $State
-    if ($isCounted) { Refresh-Display $State }
+    # 无条件刷新：休息段完成（未计数）也要更新阶段进度；整轮跑完时进度消失
+    Refresh-Display $State
 }
 
 # ---------------- 主循环 ----------------
@@ -654,6 +701,7 @@ $hintShown  = $false
 $loggedErr  = @{}
 $script:TimerEndsAt = $null   # 推断的"当前这段计时结束时刻"（$TimerDisplayMode='timer' 用）
 $script:CyclesDone  = 0       # 本次运行中已跑完的循环数
+$script:ProgressShown = $false # 阶段进度当前是否可见（仅变化时刷新，避免每轮重写 output.txt）
 $timerOnlyShown     = $false  # 当前是否处于"只显示计时"状态
 $lastWinSig         = 0       # 上次看到的 Catime 窗口尺寸（用于窗口贴角）
 
@@ -667,8 +715,9 @@ $AnchorMode = switch ($PluginAnchor) {
     default       { 0 }
 }
 
-Write-Log ("启动: 版本={0} PS={1} 配置={2} 类型={3} 阶段序列={4}" -f `
-    $PluginVersion, $PSVersionTable.PSVersion, $ConfigFile, $cfg.Type, ($cfg.Pattern -join ','))
+$catimeVer = if ($cfg.Version) { $cfg.Version.ToString() } else { 'unknown' }
+Write-Log ("启动: 插件={0} PS={1} Catime={2} 配置={3} 类型={4} 阶段序列={5}" -f `
+    $PluginVersion, $PSVersionTable.PSVersion, $catimeVer, $ConfigFile, $cfg.Type, ($cfg.Pattern -join ','))
 Write-Log ("阶段类型: {0} → {1}（{2}）" -f `
     ($cfg.Pattern -join ','), (($workMask | ForEach-Object { if ($_) { 'W' } else { 'B' } }) -join ''), $maskSource)
 
@@ -734,6 +783,15 @@ while ($true) {
             }
             elseif ($h -eq [IntPtr]::Zero) {
                 $lastToast = [IntPtr]::Zero
+            }
+
+            # 阶段进度 2/4：可见性变化时刷新（覆盖手动停表、推断过期等无完成事件的场景）
+            if ($ShowPhaseProgress) {
+                $running = Test-PhaseRunning
+                if ($running -ne $script:ProgressShown) {
+                    $script:ProgressShown = $running
+                    Refresh-Display $state
+                }
             }
 
             # $TimerDisplayMode='timer'：推断的计时窗口开/关时切换显示

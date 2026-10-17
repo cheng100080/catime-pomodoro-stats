@@ -382,6 +382,83 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- 下拉项：悬停/选中圆角块（默认 WPF 高亮是方角蓝框，与卡片圆角语言不统一） -->
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="Foreground" Value="#2F2F2C"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="ItemBg" CornerRadius="4" Background="Transparent" Margin="4,1">
+              <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="ItemBg" Property="Background" Value="#E8F2FC"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="ItemBg" Property="Background" Value="#D2E7FB"/>
+                <Setter Property="Foreground" Value="#1F6BB8"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 圆角滚动条（下拉列表用；默认 WPF 滚动条是方角+箭头）。
+         注意 Track 的 Decrease/Increase 按钮必须保留（Opacity=0 隐藏但可点），
+         否则点击轨道空白处翻页与拖动滑块都会失效 -->
+    <Style TargetType="ScrollBar">
+      <Setter Property="Width" Value="10"/>
+      <Setter Property="MinHeight" Value="24"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollBar">
+            <Track x:Name="PART_Track" IsDirectionReversed="True">
+              <Track.DecreaseRepeatButton>
+                <RepeatButton x:Name="PageUp" Command="ScrollBar.PageUpCommand" Focusable="False" Opacity="0"/>
+              </Track.DecreaseRepeatButton>
+              <Track.Thumb>
+                <Thumb x:Name="Thumb" Cursor="Hand" Margin="2,1">
+                  <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                      <Border CornerRadius="4" Background="#C9C3B6"/>
+                    </ControlTemplate>
+                  </Thumb.Template>
+                </Thumb>
+              </Track.Thumb>
+              <Track.IncreaseRepeatButton>
+                <RepeatButton x:Name="PageDown" Command="ScrollBar.PageDownCommand" Focusable="False" Opacity="0"/>
+              </Track.IncreaseRepeatButton>
+            </Track>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 关闭按钮：圆角 + 暖色悬停底（默认按钮模板悬停是方角蓝框） -->
+    <Style x:Key="CloseBtnStyle" TargetType="Button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#9A968C"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bg" CornerRadius="6" Background="{TemplateBinding Background}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bg" Property="Background" Value="#EFE9E0"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   <!-- 小字号文本防锯齿：布局对齐设备像素 + 平滑字形渲染。
          注意不能用 TextFormattingMode=Display：它把字形硬对齐到像素格，
          曲线会出现阶梯状毛刺（用户实测）；半像素落点问题由根 Border 的
@@ -406,8 +483,7 @@ $xaml = @'
           </StackPanel>
           <Button x:Name="CloseBtn" Content="&#10005;" Width="28" Height="28"
                   HorizontalAlignment="Right" VerticalAlignment="Top"
-                  Background="Transparent" BorderThickness="0" Foreground="#9A968C"
-                  FontSize="12" Cursor="Hand"/>
+                  Style="{StaticResource CloseBtnStyle}"/>
         </Grid>
       </Border>
       <!-- 标签页：概览 / 热力图（V2） -->
@@ -510,10 +586,6 @@ $xaml = @'
           </StackPanel>
         </Border>
       </UniformGrid>
-      <!-- 提示 -->
-      <TextBlock x:Name="HintText" Foreground="#9A968C" FontSize="11" Margin="2,10,0,2"
-                 TextWrapping="Wrap"
-                 Text="校准前请先停止统计插件（从 Catime 菜单启动本面板会自动停止）。"/>
       <!-- 每日校准（↑↓ 翻页可校准 400 天内的更早日期） -->
       <Grid Margin="2,4,0,6">
         <TextBlock x:Name="DayHeader" Text="近 7 天" Foreground="#2F2F2C" FontSize="13"
@@ -537,6 +609,10 @@ $xaml = @'
       <!-- 底部统一提示 -->
       <TextBlock Text="单击数字可人工校准数量" Foreground="#B3AEA4" FontSize="11"
                  HorizontalAlignment="Center" Margin="0,10,0,0"/>
+      <!-- 提示：无数据时由代码改写为红色错误信息（见 Show-NoDataHint） -->
+      <TextBlock x:Name="HintText" Foreground="#9A968C" FontSize="11" Margin="2,6,0,0"
+                 TextWrapping="Wrap" HorizontalAlignment="Center"
+                 Text="校准前请先停止统计插件（从 Catime 菜单启动本面板会自动停止）。"/>
         </StackPanel>
         </TabItem>
         <TabItem Header="热力图" Style="{StaticResource PillTab}">

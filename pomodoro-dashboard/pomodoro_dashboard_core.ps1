@@ -609,10 +609,10 @@ $xaml = @'
       <!-- 底部统一提示 -->
       <TextBlock Text="单击数字可人工校准数量" Foreground="#B3AEA4" FontSize="11"
                  HorizontalAlignment="Center" Margin="0,10,0,0"/>
-      <!-- 提示：无数据时由代码改写为红色错误信息（见 Show-NoDataHint） -->
-      <TextBlock x:Name="HintText" Foreground="#9A968C" FontSize="11" Margin="2,6,0,0"
+      <!-- 提示：颜色与上方"单击数字"保持一致（浅）；无数据时由 else 分支改写为红色错误信息 -->
+      <TextBlock x:Name="HintText" Foreground="#B3AEA4" FontSize="11" Margin="2,6,0,0"
                  TextWrapping="Wrap" HorizontalAlignment="Center"
-                 Text="校准前请先停止统计插件（从 Catime 菜单启动本面板会自动停止）。"/>
+                 Text="校准前请先停止统计插件（从 Catime 菜单启动本面板会自动停止）"/>
         </StackPanel>
         </TabItem>
         <TabItem Header="热力图" Style="{StaticResource PillTab}">

@@ -114,7 +114,7 @@ $PhaseTypes = ''
 $PollMs = 500
 
 # 插件版本号（写入启动日志，便于确认运行的代码版本）
-$PluginVersion = 'v0.20'
+$PluginVersion = 'v0.20.1'
 
 # Catime 通知弹窗的窗口类名（源码 resource_ui_ids.h 定义，请勿改动）
 $ToastClass = 'CatimeNotificationClass'
@@ -626,6 +626,16 @@ function Invoke-PhaseComplete {
 
     if ($last) {
         $gap = ($now - $last).TotalSeconds
+        # 幽灵事件守卫（v0.20.1）：Catime 在一个循环结束时会连弹两个通知
+        # （阶段完成 + "All Pomodoro cycles completed!"），第二个 toast 会产生
+        # 新窗口句柄，被误判成又一次阶段完成。真实段长 ≥ 最短段长，扣除 1s
+        # 轮询抖动余量后间隔仍短于最短段的"完成"不可能是真事件——直接忽略：
+        # 不推进相位、不计数、不重置计时推断。
+        $minDur = ($Pattern | Measure-Object -Minimum).Minimum
+        if ($gap -lt ($minDur - 1.0)) {
+            Write-Log ("忽略幽灵完成事件: 距上次 {0:F1}s < 最短段 {1}s-1s（循环结束连弹通知）" -f $gap, $minDur)
+            return
+        }
         $maxDur = ($Pattern | Measure-Object -Maximum).Maximum
         if ($gap -gt (2 * $maxDur + 300)) {
             # 距上次完成间隔远超任何一个阶段时长：视为重新开始了新的番茄钟，

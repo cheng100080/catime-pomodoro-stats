@@ -69,6 +69,14 @@ if (!PluginData_HasCatimeTag()) PluginManager_StopAllPlugins();
 
 - `complete_pomodoro_cycles` 是**进程内内存变量**，不写 config、无 IPC，插件读不到；
 - 每个阶段（工作/休息）结束都会弹一次通知，整轮结束再额外通知一次；
+- **整轮结束的额外通知会被检测机制误判成"又一次阶段完成"**（v0.20.1 修复）：
+  `TimerEvents_HandlePomodoroCompletion` 在循环结束时连弹两个 toast（阶段完成 +
+  "All Pomodoro cycles completed!"），第二个 toast 产生新窗口句柄 → 幽灵事件：
+  假计数 +1（索引绕回 0 判成工作段）、相位污染、计时推断重置（结束后幽灵显示
+  `2/4` 一个短段长）。守卫规则：距上次完成事件的间隔 **< 最短段长 - 1s**
+  （1s = 500ms 轮询抖动余量）时判为幽灵，直接忽略——真实段长 ≥ 最短段、
+  暂停只增不减，规则安全；等长测试序列（如 5,5,5,5）下间隔自纠正无法分辨
+  索引，幽灵污染的相位会带偏整轮，故守卫必须在相位推进之前。
 - 阶段序列来自 `config.ini [Pomodoro] POMODORO_TIME_OPTIONS`（**秒**，逗号分隔）；
 - **Catime 不记录工作/休息属性**：`current_pomodoro_phase` 只会是 `IDLE`/`WORK`
   （`BREAK`/`LONG_BREAK` 枚举从未使用），通知文本只含时长与轮次

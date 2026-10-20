@@ -54,6 +54,14 @@ $ShowTotal = $false
 #     每轮第 1 段进行中无法显示——第 1 段完成后进度才出现（2/4 → 3/4 → 4/4）
 $ShowPhaseProgress = $true
 
+# 启动位置还原（v0.21.0）：
+#   Catime v1.6.2 启动时窗口还没渲染内容，是 200×100×缩放 的巨大占位尺寸；
+#   此时它做"窗口至少一半可见"的钳位校验，把屏幕右下角的位置顶回屏内，
+#   之后窗口缩回真实尺寸却不再还原左上角 → 表现为"重启不记住位置"。
+#   本插件启动时用 config.ini 里保存的正确坐标把窗口按回去。
+#   config 里的坐标即用户真实意图（移动窗口必须进编辑模式，保存不被拦截）。
+$RestoreSavedPosition = $true
+
 # 插件模式的窗口位置（可选；只影响插件运行时，不会改动你正常时间的位置设置）
 #   'keep'        = 不动窗口（与正常时间共用 Catime 的位置）
 #   'bottomright' = 贴工作区右下角（自动避开任务栏）
@@ -114,7 +122,7 @@ $PhaseTypes = ''
 $PollMs = 500
 
 # 插件版本号（写入启动日志，便于确认运行的代码版本）
-$PluginVersion = 'v0.20.1'
+$PluginVersion = 'v0.21.0'
 
 # Catime 通知弹窗的窗口类名（源码 resource_ui_ids.h 定义，请勿改动）
 $ToastClass = 'CatimeNotificationClass'
@@ -151,6 +159,20 @@ public struct RECT { public int Left; public int Top; public int Right; public i
 public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct POINT { public int X; public int Y; }
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct MONITORINFO {
+    public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags;
+}
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool SetProcessDPIAware();
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern bool SystemParametersInfo(uint action, uint param, out RECT rect, uint winIni);
 // 返回类名为 cls 的第一个顶层窗口句柄，找不到返回 IntPtr.Zero
@@ -192,6 +214,23 @@ public static bool AnchorWindow(IntPtr hWnd, int mode, int marginX, int marginY)
         default: return false;
     }
     return SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, 0x0001 | 0x0004 | 0x0010);
+}
+// 把窗口移到绝对坐标 (x,y)（不改尺寸、不改层级、不激活）。
+// 返回移动前的 left/top；已在目标位置时不移动并返回 false。
+public static bool MoveWindowTo(IntPtr hWnd, int x, int y, out int oldLeft, out int oldTop) {
+    RECT r;
+    oldLeft = 0; oldTop = 0;
+    if (!GetWindowRect(hWnd, out r)) { return false; }
+    oldLeft = r.Left; oldTop = r.Top;
+    if (r.Left == x && r.Top == y) { return false; }
+    return SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, 0x0001 | 0x0004 | 0x0010);
+}
+// 目标点是否落在某个显示器上（flags=0 即 MONITOR_DEFAULTTONULL：不在任何屏幕则返回 0）。
+// 用于"显示器已拔掉"时放弃位置还原，避免把窗口按到看不见的地方。
+public static bool IsPointOnMonitor(int x, int y) {
+    POINT p = new POINT();
+    p.X = x; p.Y = y;
+    return MonitorFromPoint(p, 0) != IntPtr.Zero;
 }
 // 把一行文字渲染成透明 PNG（字体与配色跟随 Catime 当前设置），返回 "宽x高"，失败返回 ""
 public static string RenderStatsImage(string text, string fontPath, string colorSpec, int fontPx, string outPath) {
@@ -253,6 +292,13 @@ private static bool TryParseHexColor(string spec, int idx, out System.Drawing.Co
 }
 '@
 
+# 进程 DPI 感知（per-monitor v2）：Catime 自身是 DPI 感知的，窗口坐标一律用物理像素；
+# 而未感知的进程会被系统虚拟化（200% 缩放下屏幕被呈现为 1280×800，坐标减半），
+# 导致位置还原/贴角算错，甚至把物理坐标误判成"不在任何显示器上"。
+# 必须在任何窗口操作之前设置，且要早于第一个窗口创建（本插件不建窗，安全）。
+try { [void][PomStat.Win]::SetProcessDpiAwarenessContext([IntPtr](-4)) }
+catch { try { [void][PomStat.Win]::SetProcessDPIAware() } catch { } }
+
 # ---------------- 配置读取 ----------------
 
 function Read-CatimeConfig {
@@ -263,7 +309,8 @@ function Read-CatimeConfig {
       读取失败时返回默认值（与 Catime 内置默认一致）。
     #>
     $result = @{ Type = 'CATIME'; Pattern = @(1500, 300, 1500, 600); LoopCount = 1
-                 FontFile = ''; TextColor = ''; PluginScale = 1.0; Version = $null }
+                 FontFile = ''; TextColor = ''; PluginScale = 1.0; Version = $null
+                 PosX = $null; PosY = $null }
     if (-not $ConfigFile) { return $result }
     try {
         $section = ''
@@ -301,6 +348,15 @@ function Read-CatimeConfig {
                 # 图片会被 Catime 按此缩放放大，输出尺寸要除回去才能 1:1 显示
                 $sc = 0.0
                 if ([double]::TryParse($val, [ref]$sc) -and $sc -gt 0) { $result.PluginScale = $sc }
+            }
+            elseif ($section -eq 'Display' -and $key -eq 'CLOCK_WINDOW_POS_X' -and $val) {
+                # 保存的窗口位置（v0.21.0 启动位置还原用）
+                $v = 0
+                if ([int]::TryParse($val, [ref]$v)) { $result.PosX = $v }
+            }
+            elseif ($section -eq 'Display' -and $key -eq 'CLOCK_WINDOW_POS_Y' -and $val) {
+                $v = 0
+                if ([int]::TryParse($val, [ref]$v)) { $result.PosY = $v }
             }
             elseif ($section -eq 'Pomodoro' -and $key -eq 'POMODORO_LOOP_COUNT') {
                 if ($val -match '^\d+$' -and [int]$val -ge 1) { $result.LoopCount = [int]$val }
@@ -492,6 +548,32 @@ function Get-PhaseProgressText {
     $idx = 0
     if ($State -ne $null) { $idx = [int]$State.phase }
     return ('{0}/{1}' -f (($idx % $n) + 1), $n)
+}
+
+function Restore-SavedWindowPosition {
+    <# 把 Catime 窗口还原到 config.ini 里保存的位置（背景见 $RestoreSavedPosition 注释）。
+       config 里的坐标始终是用户真实意图：Catime 移动窗口必须进编辑模式（普通模式
+       点击穿透），编辑模式下位置保存不被拦截，且拖动停止后有防抖写盘。 #>
+    param($Cfg)
+
+    if (-not $RestoreSavedPosition) { return }
+    if ($null -eq $Cfg.PosX -or $null -eq $Cfg.PosY) { return }
+    # -2/-1 是 Catime 的"无手动位置"标记（DEFAULT_WINDOW_POS_X / _Y）
+    if ($Cfg.PosX -lt 0 -or $Cfg.PosY -lt 0) { return }
+
+    # 目标点必须落在某个显示器上：显示器被拔掉时不要把窗口按到看不见的地方
+    if (-not [PomStat.Win]::IsPointOnMonitor([int]$Cfg.PosX, [int]$Cfg.PosY)) {
+        Write-Log ("跳过位置还原：目标 ({0},{1}) 不在任何显示器上" -f $Cfg.PosX, $Cfg.PosY)
+        return
+    }
+
+    $h = [PomStat.Win]::FindWindowByClass('CatimeWindowClass')
+    if ($h -eq [IntPtr]::Zero) { return }
+
+    $oldX = 0; $oldY = 0
+    if ([PomStat.Win]::MoveWindowTo($h, [int]$Cfg.PosX, [int]$Cfg.PosY, [ref]$oldX, [ref]$oldY)) {
+        Write-Log ("还原窗口位置: ({0},{1}) -> ({2},{3})" -f $oldX, $oldY, $Cfg.PosX, $Cfg.PosY)
+    }
 }
 
 function Update-StatsImage {
@@ -732,6 +814,7 @@ Write-Log ("阶段类型: {0} → {1}（{2}）" -f `
     ($cfg.Pattern -join ','), (($workMask | ForEach-Object { if ($_) { 'W' } else { 'B' } }) -join ''), $maskSource)
 
 # 启动时立即写一次，避免 Catime 窗口空白
+Restore-SavedWindowPosition $cfg
 Save-State $state
 if ($cfg.Type -ne 'CATIME') {
     Write-Display ('SET CATIME' + $CatimeTag)

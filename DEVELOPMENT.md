@@ -178,6 +178,16 @@ CatimeNotificationClass 新窗口（500ms 轮询，EnumWindows + GetClassName）
 - 番茄钟通知**文案不可改**（Catime 本地化字符串编译进 exe，从内嵌资源加载）；
 - 统计图会随刷新累积遗留 PNG（Catime 永久锁定正在显示的图片，删不掉，每个约 2KB），
   **Catime 重启后自动清理**，属设计内自愈。
+- **Catime v1.6.2 启动时位置会被钳歪**（窗口未渲染内容时是 200×100×缩放 的巨大占位
+  尺寸，"窗口至少一半可见"的钳位把右下角位置顶回屏内，之后窗口缩回真实尺寸却不再
+  还原左上角）→ 统计插件启动时用 `config.ini` 的 `CLOCK_WINDOW_POS_X/Y` 把窗口按回去
+  （`$RestoreSavedPosition` 开关；config 里的坐标即用户真实意图，因为移动窗口必须进
+  编辑模式、编辑模式下保存不被拦截，且拖动停止后 500ms 防抖写盘）。根治需上游修
+  `ResolveConfiguredWindowPosition` 的钳位时机。
+- **插件进程必须设为 DPI 感知**（per-monitor v2）：Catime 自身 DPI 感知，窗口坐标用
+  物理像素；未感知的进程会被系统虚拟化（200% 缩放下屏幕呈现为 1280×800、坐标减半），
+  导致位置还原/贴角算错，甚至把物理坐标误判成"不在任何显示器上"。同理，
+  调试用探针要用 python ctypes（DPI 未感知，坐标减半），不能直接看 config 数值。
 
 ## 12. 图标来源
 

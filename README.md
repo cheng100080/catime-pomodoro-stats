@@ -21,9 +21,12 @@
 $ShowWeek  = $true    # 本周
 $ShowMonth = $false   # 本月
 $ShowTotal = $false   # 累计
+$RestoreSavedPosition = $true   # 启动时把窗口还原到已保存的位置
 ```
 
 设成 `$true` 就会显示，例如全开时是 `21:49  T3 W12 M40 A57`。关掉的项**依然照常统计**，只是不显示。
+
+> `$RestoreSavedPosition` 修的是 Catime v1.6.2 的一个位置 bug：它启动时窗口还是占位尺寸（200×100×缩放），此时"窗口至少一半可见"的钳位会把屏幕右下角的位置顶回屏内，之后窗口缩回真实大小却不再还原左上角——表现为**重启后位置跑掉**。本插件启动时会用配置里保存的坐标把窗口按回去。
 
 ### 阶段进度（`$ShowPhaseProgress`）
 
